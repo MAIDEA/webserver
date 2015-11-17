@@ -1,0 +1,12 @@
+serviceapp-web:
+  build: .
+  volumes:
+   - "./src:/src"   
+   - "./.log:/var/log"   
+  environment: 
+  #promjeniti ime za "automatski dns"
+   - VIRTUAL_HOST=webserver_test.docker.maidea.internal
+  expose:
+   - "80"
+  #promjenit container_name da se izbjegnu konflikti unutar dockerhosta
+  container_name: test_webserver
