@@ -68,7 +68,6 @@ COPY nginx.conf gzip_params fastcgi_params /etc/nginx/
 COPY supervisord.conf /etc/supervisor/supervisord.conf
 #COPY logrotate.app_engine /etc/logrotate.d/app_engine
 #COPY entrypoint.sh composer.sh whitelist_functions.php /
-
 COPY php-fpm.conf php.ini php-cli.ini /etc/php5/fpm/
 
 

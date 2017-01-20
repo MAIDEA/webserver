@@ -1,5 +1,5 @@
 serviceapp-web:
-  build: docker
+  build: .
   volumes:
    - "./src/app:/app"
    - "./.log:/var/log"   
