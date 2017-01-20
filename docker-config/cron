@@ -1,0 +1,7 @@
+# This is fed to crontab command (ex: crontab /path/cron)
+# this format does not have user config like main crontab
+# dont forget to uncomment and run cron daemon in start.sh
+
+#example for running scheduler in cakephp every minute:
+# m h    dom mon dow    command
+#* *      * * *          /src/app/bin/cake Scheduler >> /var/log/scheduler.log 2>&1 &
