@@ -1,4 +1,4 @@
-FROM debian:8.3
+FROM debian:8
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -8,7 +8,6 @@ RUN apt-get update && \
     apt-get install -y \
     cron \
     curl \
-    gettext \
     git \
     php5-dev \
     php5-cli \
