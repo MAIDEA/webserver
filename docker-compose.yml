@@ -1,7 +1,7 @@
 serviceapp-web:
-  build: .
+  build: docker
   volumes:
-   - "./src:/src"   
+   - "./src/app:/app"
    - "./.log:/var/log"   
   environment: 
   #promjeniti ime za "automatski dns"
