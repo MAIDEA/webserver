@@ -1,4 +1,4 @@
-FROM debian:8.2
+FROM debian:8
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -9,9 +9,9 @@ RUN apt-get update && apt-get install -y \
     php5-dev \
     php5-cli \
     php5-mysql \
-	php5-mcrypt \
     php5-intl \
     php5-curl \
+    php5-mcrypt \
     php5-fpm \
     php-pear \
     nginx
@@ -20,12 +20,13 @@ RUN apt-get update && apt-get install -y \
 
 
 
-#download and install WKHTMLTOPDF with patched qt (version from web b ecause version in repo does not have "pathed QT")
+
+#install WKHTMLTOPDF with patched qt (download from website instead of install from source)
 RUN curl -sS -o wkhtml.deb http://download.gna.org/wkhtmltopdf/0.12/0.12.2.1/wkhtmltox-0.12.2.1_linux-jessie-amd64.deb
 #requirements
 RUN apt-get install -y fontconfig libxrender1 xfonts-base xfonts-75dpi
 RUN dpkg -i wkhtml.deb
-RUN rm wkhtml.deb    
+RUN rm wkhtml.deb
 
 
 #install CRON so we can use scheduler 
@@ -45,22 +46,32 @@ RUN crontab /etc/cron
 # You basically run one command, thats the sole purpose of your container. A very simple-minded container :)
 RUN echo "daemon off;" >> /etc/nginx/nginx.conf
 
-# Install composer
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer
-
 
 # Use FPM config files for php config
 COPY docker-config/php/fpm.php.ini /etc/php5/fpm/php.ini
 COPY docker-config/php/fpm.pool.conf /etc/php5/fpm/pool.d/www.conf
 
-#use nginx site config files
-RUN rm /etc/nginx/sites-enabled/*
-COPY docker-config/vhosts/* /etc/nginx/sites-enabled/
 
+# Install composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer
 
 
 # Install the server start script
 COPY docker-config/start.sh /start.sh
 RUN chmod u+x /start.sh
+
+RUN rm /etc/nginx/sites-enabled/*
+COPY docker-config/vhosts/* /etc/nginx/sites-enabled/
+
+
+# za produkciju treba skopirati source kod u container (al bez jos pripreme ne radi)
+#COPY src/* /src
+
+#add Xdebug
+RUN yes | pecl install xdebug \
+    && echo "zend_extension=$(find /usr/lib/ -name xdebug.so)" > /etc/php5/fpm/conf.d/xdebug.ini \
+    && echo "xdebug.remote_enable=on" >> /etc/php5/fpm/conf.d/xdebug.ini \
+    && echo "xdebug.remote_host=REPLACED_IN_START_SCRIPT" >> /etc/php5/fpm/conf.d/xdebug.ini \
+    && echo "xdebug.remote_autostart=on" >> /etc/php5/fpm/conf.d/xdebug.ini
 
 CMD /start.sh

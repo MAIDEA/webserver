@@ -1,11 +1,13 @@
 serviceapp-web:
   build: .
   volumes:
-   - "./src:/src"   
-   - "./.log:/var/log"   
+   - "./src:/src"
   environment: 
   #promjeniti ime za "automatski dns"
    - VIRTUAL_HOST=webserver_test.docker.maidea.internal
+   #promjeniti na lokalni IP za Xdebug
+   - XDEBUG_HOST=172.28.10.0
+   - PHP_IDE_CONFIG=serverName=Dockerhost
   expose:
    - "80"
   #promjenit container_name da se izbjegnu konflikti unutar dockerhosta
