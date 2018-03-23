@@ -1,12 +1,53 @@
-# maidea_webserver
-Nginx, Php-fpm and wkhtml container for simple docker dev/test environments
-- for use with CakePhp
-- dev branch has Xdebug
+# Maidea web server
+Nginx/Apache, php-fpm and wkhtml container for simple docker dev/test environments
+* intended for use with CakePhp, but works with any compatible php configuration
+* dev branch has xdebug
+
+#### Version dev-apache-php:
+
+* Based on the official **[php:5.6-apache](https://hub.docker.com/r/library/php/)** image
+* **Apache** root is set to */src/app/webroot*
+* **XDebug** is enabled and configured to connect to remote client
+    * To make XDebug connect to the dev machine, set the **XDEBUG_REMOTE_HOST** environment variable to your dev IP address (xdebug.remote_host config)
+    * You can set the xdebug.idekey via the **XDEBUG_IDE_KEY** environment variable (e.g. XDEBUG_IDE_KEY=PHPSTORM)
 
 
-TODO: propper readme
+The recommended development configuration is using **[Docker Compose](https://docs.docker.com/compose/)**:
+```yaml
+version: '3'
 
-####Version 1:
+services:
+  my_webapp:
+  
+    build: maidea/webserver:dev-apache-php
+    
+    volumes:
+      # docker volume for app source
+      - "./src:/src"
+      
+    environment:
+      # uncomment and modify the next two lines if using jwilder/nginx-proxy
+      #- VIRTUAL_PORT=80
+      #- VIRTUAL_HOST=host.example.com
+      
+    # uncomment and modify the next two lines if using traefik
+    #labels:
+      #- "traefik.frontend.rule=Host:host.example.com"
+      
+    expose:
+      - "80"
+    
+    # example connection to development microservices:
+    external_links:
+      - mailhog
+      
+    # use whichever network config you require, e.g.:
+    network_mode: "bridge"
+  ```
+
+---
+
+##### [DEPRECATED] Version 1:
 nginx root is set to */src/app/webroot*
 
 using compose:
@@ -24,7 +65,7 @@ webserver:
   ```
 
 
-####Version 2:
+##### [DEPRECATED] Version 2:
 
 nginx root is set to */app/webroot*
 
@@ -41,33 +82,3 @@ webserver:
    - "80"
   container_name: webserver1
   ```
-
-
-####Version dev:
-
-nginx root is set to */app/webroot*
-
-Xdebug is enabled and configured to connect to remote client
-
-using compose:
-```yaml
-webserver:
-  image: maidea/webserver:dev
-  volumes:
-   - "./src/app:/app"
-  environment:
-    #for use witn jwilder/nginx-proxy
-   - VIRTUAL_HOST=host.example.com
-   #set to dev (IDE) client IP
-   - XDEBUG_HOST=192.168.200.300
-   #name of server configuration in phpstorm
-   - PHP_IDE_CONFIG=serverName=Dockerhost
-  expose:
-   - "80"
-  container_name: webserver1
-  ```
-
-
-Phpstorm configuration needs to be Web-application, and folders need to be mapped:
-
-![PhpStorm config](PHPstormXdebugSetup.png)
