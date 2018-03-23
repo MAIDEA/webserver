@@ -19,7 +19,7 @@ version: '3'
 services:
   my_webapp:
   
-    build: maidea/webserver:dev1.4-apache-php5.6
+    image: maidea/webserver:dev1.4-apache-php5.6
     
     volumes:
       # docker volume for app source
