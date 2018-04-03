@@ -13,7 +13,7 @@ Nginx/Apache, php-fpm and wkhtml container for simple docker dev/test environmen
 
 The tags are currently:
 
-* **dev** - actively maintaned apache and php fpm devleopment server with xdebug
+* **dev** - actively maintaned apache and php fpm development server with xdebug
 * **devX.X-apache-phpY.Y** - specific image with a release number X.X and php version Y.Y
     * latest is **dev1.7-apache-php5.6**
 
