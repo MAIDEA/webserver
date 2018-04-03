@@ -11,14 +11,21 @@ Nginx/Apache, php-fpm and wkhtml container for simple docker dev/test environmen
     * To make XDebug connect to the dev machine, set the **XDEBUG_REMOTE_HOST** environment variable to your dev IP address (xdebug.remote_host config)
     * You can set the xdebug.idekey via the **XDEBUG_IDE_KEY** environment variable (e.g. XDEBUG_IDE_KEY=PHPSTORM)
 
+The tags are currently:
+
+* **dev** - actively maintaned apache and php fpm devleopment server with xdebug
+* **devX.X-apache-phpY.Y** - specific image with a release number X.X and php version Y.Y
+    * latest is **dev1.7-apache-php5.6**
 
 The recommended development configuration is using **[Docker Compose](https://docs.docker.com/compose/)**:
+
 ```yaml
 version: '3'
 
 services:
   my_webapp:
   
+    # "dev" tag is the latest tag for a development server
     image: maidea/webserver:dev
     
     volumes:
