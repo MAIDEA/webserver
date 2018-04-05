@@ -3,14 +3,22 @@ Nginx/Apache, php-fpm and wkhtml container for simple docker dev/test environmen
 * intended for use with CakePhp, but works with any compatible php configuration
 * dev branch has xdebug
 
-#### Version dev-apache-php:
+#### Dev images:
 
-* Based on the official **[php:5.6-apache](https://hub.docker.com/r/library/php/)** image
+* Based on the official **[php+apache](https://hub.docker.com/r/library/php/)** images
 * **Apache** root is set to */src/app/webroot*
-* **XDebug** is enabled and configured to connect to remote client
+* **XDebug** (2.5.5) is enabled and configured to connect to remote client
     * To make XDebug connect to the dev machine, set the **XDEBUG_REMOTE_HOST** environment variable to your dev IP address (xdebug.remote_host config)
     * You can set the xdebug.idekey via the **XDEBUG_IDE_KEY** environment variable (e.g. XDEBUG_IDE_KEY=PHPSTORM)
+* **wkhtmltopdf** (0.12.4) binary added to /usr/local/bin
 
+Tags:
+
+* **dev** - the default dev image
+    * php5.6
+* Specific image tags:
+    * **dev-apache-php5.6**
+    * **dev-apache-php7.2**
 
 The recommended development configuration is using **[Docker Compose](https://docs.docker.com/compose/)**:
 ```yaml
