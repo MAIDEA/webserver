@@ -1,4 +1,4 @@
-FROM php:5.6-apache
+FROM php:7.2-apache
 
 COPY _docker-config/php.ini /usr/local/etc/php/
 
@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y \
     libpng12-dev
 
 RUN pecl update-channels
-RUN pecl install channel://pecl.php.net/xdebug-2.5.5 \
+RUN pecl install channel://pecl.php.net/xdebug \
     && echo "date.timezone = \"UTC\"" >> /usr/local/etc/php/conf.d/timezone.ini \
     && echo "xdebug.remote_enable=on" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && echo "xdebug.remote_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
