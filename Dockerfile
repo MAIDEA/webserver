@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     libxml2-dev \
     mysql-client \
     libmcrypt-dev \
+    libreadline-dev \
     libicu-dev \
     libc-client-dev \
     libkrb5-dev \
@@ -23,7 +24,7 @@ RUN apt-get update && apt-get install -y \
     xfonts-75dpi \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
-    libpng12-dev
+    libpng-dev
 
 RUN pecl update-channels
 RUN pecl install channel://pecl.php.net/xdebug \
@@ -33,14 +34,15 @@ RUN pecl install channel://pecl.php.net/xdebug \
     && echo "xdebug.idekey=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && docker-php-ext-enable xdebug
 
+RUN pecl install mcrypt-1.0.1
+
 RUN docker-php-ext-install intl \
-    && docker-php-ext-install pdo_mysql \
-    && docker-php-ext-install mcrypt \
-    && docker-php-ext-install pcntl \
-    && docker-php-ext-install zip \
-    && docker-php-ext-install bcmath \
-    && docker-php-ext-install mbstring \
-    && docker-php-ext-install iconv
+    docker-php-ext-install pdo_mysql \
+    docker-php-ext-enable mcrypt \
+    docker-php-ext-install pcntl \
+    docker-php-ext-install zip \
+    docker-php-ext-install bcmath
+
 
 RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
     && docker-php-ext-install -j$(nproc) gd
