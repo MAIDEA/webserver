@@ -43,6 +43,7 @@ RUN docker-php-ext-install intl \
     && docker-php-ext-install iconv \
     && docker-php-ext-install soap \
     && docker-php-ext-install shmop \
+    && docker-php-ext-install imap \
     && docker-php-ext-configure imap --with-kerberos --with-imap-ssl
 
 RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
