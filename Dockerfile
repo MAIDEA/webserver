@@ -22,8 +22,7 @@ RUN apt-get update && apt-get install -y \
     xfonts-base \
     xfonts-75dpi \
     libfreetype6-dev \
-    libjpeg62-turbo-dev \
-    libpng12-dev
+    libjpeg62-turbo-dev
 
 RUN pecl update-channels
 RUN pecl install channel://pecl.php.net/xdebug-2.5.5 \
@@ -44,7 +43,8 @@ RUN docker-php-ext-install intl \
     && docker-php-ext-install soap \
     && docker-php-ext-install shmop \
     && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
-    && docker-php-ext-install imap
+    && docker-php-ext-install imap \
+    && docker-php-ext-install sockets
 
 RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
     && docker-php-ext-install -j$(nproc) gd
