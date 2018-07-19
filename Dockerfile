@@ -44,7 +44,8 @@ RUN docker-php-ext-install intl \
     && docker-php-ext-install bcmath \
     && docker-php-ext-install shmop \
     && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
-    && docker-php-ext-install imap
+    && docker-php-ext-install imap \
+    && docker-php-ext-install sockets
 
 RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
     && docker-php-ext-install -j$(nproc) gd
