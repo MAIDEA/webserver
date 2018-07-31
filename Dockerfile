@@ -57,10 +57,13 @@ RUN curl -sS https://getcomposer.org/installer \
 
 # Download, extract and move wkhtml in place
 WORKDIR /tmp
-RUN curl -S -s -L -o wkhtmltopdf.tar.xz http://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
-    && tar -xvf wkhtmltopdf.tar.xz \
-    && mv wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf \
-    && chmod +x /usr/local/bin/wkhtmltopdf
+RUN curl -S -s -L -o wkhtmltopdf.deb https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.5/wkhtmltox_0.12.5-1.stretch_amd64.deb \
+    && dpkg -i wkhtmltopdf.deb
+
+#RUN curl -S -s -L -o wkhtmltopdf.tar.xz http://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
+#    && tar -xvf wkhtmltopdf.tar.xz \
+#    && mv wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf \
+#    && chmod +x /usr/local/bin/wkhtmltopdf
 
 WORKDIR /src
 
