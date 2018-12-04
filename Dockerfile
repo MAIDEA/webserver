@@ -34,11 +34,9 @@ RUN pecl install channel://pecl.php.net/xdebug \
     && echo "xdebug.idekey=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && docker-php-ext-enable xdebug
 
-RUN pecl install mcrypt-1.0.1
-
 RUN docker-php-ext-install intl \
     && docker-php-ext-install pdo_mysql \
-    && docker-php-ext-enable mcrypt \
+    && docker-php-ext-install mcrypt \
     && docker-php-ext-install pcntl \
     && docker-php-ext-install zip \
     && docker-php-ext-install bcmath \
