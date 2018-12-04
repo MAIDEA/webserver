@@ -1,4 +1,4 @@
-FROM php:7.2-apache
+FROM php:7.0-apache
 
 COPY _docker-config/php.ini /usr/local/etc/php/
 
