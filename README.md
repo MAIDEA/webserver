@@ -19,6 +19,7 @@ Tags:
 * Specific image tags:
     * **dev-apache-php5.6**
     * **dev-apache-php7.2**
+    * **dev-apache-php7.0**
 
 The recommended development configuration is using **[Docker Compose](https://docs.docker.com/compose/)**:
 ```yaml
