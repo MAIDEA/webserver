@@ -24,7 +24,8 @@ RUN apt-get update && apt-get install -y \
     xfonts-75dpi \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
-    libpng-dev
+    libpng-dev \
+    libmpdec-dev
 
 RUN pecl update-channels
 RUN pecl install channel://pecl.php.net/xdebug \
