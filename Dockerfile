@@ -25,7 +25,8 @@ RUN apt-get update && apt-get install -y \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
     libpng-dev \
-    libmpdec-dev
+    libmpdec-dev \
+    libzip-dev
 
 RUN pecl update-channels
 RUN pecl install channel://pecl.php.net/xdebug \
