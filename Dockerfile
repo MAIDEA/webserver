@@ -1,4 +1,4 @@
-FROM php:7.2-apache
+FROM php:7.3.4-apache-stretch
 
 COPY _docker-config/php.ini /usr/local/etc/php/
 
@@ -34,7 +34,8 @@ RUN pecl install channel://pecl.php.net/xdebug \
     && echo "xdebug.idekey=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && docker-php-ext-enable xdebug
 
-RUN pecl install mcrypt-1.0.1
+RUN pecl install mcrypt-1.0.1 \
+    && pecl install decimal
 
 RUN docker-php-ext-install intl \
     && docker-php-ext-install pdo_mysql \
@@ -58,10 +59,8 @@ RUN curl -sS https://getcomposer.org/installer \
 
 # Download, extract and move wkhtml in place
 WORKDIR /tmp
-RUN curl -S -s -L -o wkhtmltopdf.tar.xz http://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
-    && tar -xvf wkhtmltopdf.tar.xz \
-    && mv wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf \
-    && chmod +x /usr/local/bin/wkhtmltopdf
+RUN curl -S -s -L -o wkhtmltopdf.deb https://downloads.wkhtmltopdf.org/0.12/0.12.5/wkhtmltox_0.12.5-1.stretch_amd64.deb \
+    && dpkg -i wkhtmltopdf.deb
 
 WORKDIR /src
 
