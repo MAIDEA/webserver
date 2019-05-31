@@ -1,4 +1,4 @@
-FROM php:7.3.4-apache-stretch
+FROM php:7.3.5-apache-stretch
 
 COPY _docker-config/php.ini /usr/local/etc/php/
 
@@ -29,7 +29,8 @@ RUN apt-get update && apt-get install -y \
     libzip-dev
 
 RUN pecl update-channels
-RUN pecl install channel://pecl.php.net/xdebug \
+RUN pecl install apcu \
+    && pecl install channel://pecl.php.net/xdebug \
     && echo "date.timezone = \"UTC\"" >> /usr/local/etc/php/conf.d/timezone.ini \
     && echo "xdebug.remote_enable=on" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && echo "xdebug.remote_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
@@ -49,7 +50,9 @@ RUN docker-php-ext-install intl \
     && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
     && docker-php-ext-install imap \
     && docker-php-ext-install sockets \
-    && docker-php-ext-install soap
+    && docker-php-ext-install soap \
+    && docker-php-ext-install opcache \
+    && docker-php-ext-configure opcache --enable-opcache
 
 RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
     && docker-php-ext-install -j$(nproc) gd
