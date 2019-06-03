@@ -30,12 +30,7 @@ RUN apt-get update && apt-get install -y \
 
 RUN pecl update-channels
 RUN pecl install apcu \
-    && pecl install channel://pecl.php.net/xdebug \
-    && echo "date.timezone = \"UTC\"" >> /usr/local/etc/php/conf.d/timezone.ini \
-    && echo "xdebug.remote_enable=on" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.remote_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.idekey=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && docker-php-ext-enable xdebug
+    && echo "date.timezone = \"UTC\"" >> /usr/local/etc/php/conf.d/timezone.ini
 
 RUN pecl install mcrypt-1.0.2 \
     && pecl install decimal
