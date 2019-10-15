@@ -1,4 +1,4 @@
-FROM php:7.3.5-apache-stretch
+FROM php:7.3-apache-stretch
 
 COPY _docker-config/php.ini /usr/local/etc/php/
 
