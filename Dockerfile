@@ -1,4 +1,4 @@
-FROM php:7.3-apache-stretch
+FROM php:7.3.12-apache-stretch
 
 COPY _docker-config/php.ini /usr/local/etc/php/
 
@@ -47,7 +47,9 @@ RUN docker-php-ext-install intl \
     && docker-php-ext-install sockets \
     && docker-php-ext-install soap \
     && docker-php-ext-install opcache \
-    && docker-php-ext-configure opcache --enable-opcache
+    && docker-php-ext-configure opcache --enable-opcache \
+    && echo "apc.enable_cli=1" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini \
+    && echo "apc.shm_size=256M" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
 
 RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
     && docker-php-ext-install -j$(nproc) gd
