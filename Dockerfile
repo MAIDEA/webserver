@@ -1,12 +1,16 @@
-FROM php:7.3-apache-stretch
+FROM php:7.4-apache
 
 COPY _docker-config/php.ini /usr/local/etc/php/
 
+ENV LANG C.UTF-8
+ENV LC_ALL C.UTF-8
+
 RUN apt-get update && apt-get install -y \
+    pkg-config \
     curl \
     git \
     libxml2-dev \
-    mysql-client \
+    mariadb-client \
     libmcrypt-dev \
     libreadline-dev \
     libicu-dev \
@@ -26,31 +30,43 @@ RUN apt-get update && apt-get install -y \
     libjpeg62-turbo-dev \
     libpng-dev \
     libmpdec-dev \
-    libzip-dev
+    libzip-dev \
+    libwebp-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN pecl update-channels
 RUN pecl install apcu \
-    && echo "date.timezone = \"UTC\"" >> /usr/local/etc/php/conf.d/timezone.ini
+    && pecl install xdebug \
+    && echo "date.timezone = \"UTC\"" >> /usr/local/etc/php/conf.d/timezone.ini \
+    && echo "xdebug.profiler_enable_trigger = 1" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.profiler_enable_trigger_value = XDEBUG_PROFILE" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.profiler_output_dir = /tmp/profiling" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.remote_enable = on" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.remote_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.idekey=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && docker-php-ext-enable xdebug
 
-RUN pecl install mcrypt-1.0.2 \
+RUN pecl install mcrypt-1.0.3 \
     && pecl install decimal
 
-RUN docker-php-ext-install intl \
-    && docker-php-ext-install pdo_mysql \
+RUN docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp
+
+RUN docker-php-ext-install -j$(nproc) gd \
+    && docker-php-ext-install intl \
+    && docker-php-ext-install -j$(nproc) pdo_mysql \
     && docker-php-ext-enable mcrypt \
     && docker-php-ext-install pcntl \
     && docker-php-ext-install zip \
     && docker-php-ext-install bcmath \
     && docker-php-ext-install shmop \
-    && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
+    && PHP_OPENSSL=yes docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
     && docker-php-ext-install imap \
     && docker-php-ext-install sockets \
     && docker-php-ext-install soap \
-    && docker-php-ext-install opcache \
-    && docker-php-ext-configure opcache --enable-opcache
-
-RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
-    && docker-php-ext-install -j$(nproc) gd
+    && docker-php-ext-install -j$(nproc) opcache \
+    && docker-php-ext-configure opcache --enable-opcache \
+    && echo "apc.enable_cli=1" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini \
+    && echo "apc.shm_size=512M" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
 
 RUN a2enmod rewrite
 
