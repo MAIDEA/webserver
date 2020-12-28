@@ -34,16 +34,20 @@ RUN apt-get update && apt-get install -y \
     libwebp-dev \
     && rm -rf /var/lib/apt/lists/*
 
+ARG XDEBUG_REMOTE_PORT=9003
+ARG XDEBUG_IDE_KEY=PHPSTORM
+ARG XDEBUG_MODE=develop,debug
+
+ENV XDEBUG_MODE ${XDEBUG_MODE}
+ENV XDEBUG_IDE_KEY ${XDEBUG_IDE_KEY}
+
 RUN pecl update-channels
 RUN pecl install apcu \
     && pecl install xdebug \
     && echo "date.timezone = \"UTC\"" >> /usr/local/etc/php/conf.d/timezone.ini \
-    && echo "xdebug.profiler_enable_trigger = 1" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.profiler_enable_trigger_value = XDEBUG_PROFILE" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.profiler_output_dir = /tmp/profiling" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.remote_enable = on" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.remote_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.idekey=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.client_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.start_with_request=trigger" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.trigger_value=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && docker-php-ext-enable xdebug
 
 RUN pecl install mcrypt-1.0.3 \
@@ -75,7 +79,7 @@ RUN curl -sS https://getcomposer.org/installer \
 
 # Download, extract and move wkhtml in place
 WORKDIR /tmp
-RUN curl -S -s -L -o wkhtmltopdf.deb https://downloads.wkhtmltopdf.org/0.12/0.12.5/wkhtmltox_0.12.5-1.stretch_amd64.deb \
+RUN curl -S -s -L -o wkhtmltopdf.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.buster_amd64.deb \
     && dpkg -i wkhtmltopdf.deb
 
 WORKDIR /src
