@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y \
     libmpdec-dev \
     libzip-dev \
     libwebp-dev \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 ARG XDEBUG_REMOTE_PORT=9003
@@ -69,6 +70,8 @@ RUN docker-php-ext-install -j$(nproc) gd \
     && docker-php-ext-install soap \
     && docker-php-ext-install -j$(nproc) opcache \
     && docker-php-ext-configure opcache --enable-opcache \
+    && docker-php-ext-configure pgsql -with-pgsql=/usr/local/pgsql \
+    && docker-php-ext-install pdo pdo_pgsql pgsql \
     && echo "apc.enable_cli=1" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini \
     && echo "apc.shm_size=512M" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
 
