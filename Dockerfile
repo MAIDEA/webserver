@@ -1,4 +1,4 @@
-FROM php:7.4-apache
+FROM php:7.4-apache-bullseye
 
 COPY _docker-config/php.ini /usr/local/etc/php/
 
@@ -82,7 +82,7 @@ RUN curl -sS https://getcomposer.org/installer \
 
 # Download, extract and move wkhtml in place
 WORKDIR /tmp
-RUN curl -S -s -L -o wkhtmltopdf.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.buster_amd64.deb \
+RUN curl -S -s -L -o wkhtmltopdf.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-2/wkhtmltox_0.12.6.1-2.bullseye_amd64.deb \
     && dpkg -i wkhtmltopdf.deb
 
 WORKDIR /src
