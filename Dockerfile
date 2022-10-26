@@ -5,7 +5,7 @@ COPY _docker-config/php.ini /usr/local/etc/php/
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get remove composer && apt-get install -y \
     pkg-config \
     curl \
     git \
