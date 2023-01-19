@@ -1,9 +1,11 @@
-FROM php:7.4-apache-bullseye
+FROM php:8.2-apache-bullseye
 
 COPY _docker-config/php.ini /usr/local/etc/php/
 
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
+
+ENV PHP_MEMORY_LIMIT 1024M
 
 RUN apt-get update && apt-get remove composer && apt-get install -y \
     pkg-config \
@@ -51,7 +53,7 @@ RUN pecl install apcu \
     && echo "xdebug.trigger_value=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && docker-php-ext-enable xdebug
 
-RUN pecl install mcrypt-1.0.3 \
+RUN pecl install -n mcrypt \
     && pecl install decimal
 
 RUN docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp
