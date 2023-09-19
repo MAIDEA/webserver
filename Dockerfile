@@ -40,9 +40,11 @@ RUN apt-get update && apt-get remove composer && apt-get install -y \
 ARG XDEBUG_REMOTE_PORT=9003
 ARG XDEBUG_IDE_KEY=PHPSTORM
 ARG XDEBUG_MODE=develop,debug
+ARG XDEBUG_OUTPUT_DIR=/tmp
 
 ENV XDEBUG_MODE ${XDEBUG_MODE}
 ENV XDEBUG_IDE_KEY ${XDEBUG_IDE_KEY}
+ENV XDEBUG_OUTPUT_DIR ${XDEBUG_OUTPUT_DIR}
 
 RUN pecl update-channels
 RUN pecl install apcu \
@@ -51,6 +53,7 @@ RUN pecl install apcu \
     && echo "xdebug.client_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && echo "xdebug.start_with_request=trigger" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && echo "xdebug.trigger_value=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.output_dir=\${XDEBUG_OUTPUT_DIR}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && docker-php-ext-enable xdebug
 
 RUN pecl install -n mcrypt \
