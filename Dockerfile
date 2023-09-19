@@ -50,6 +50,7 @@ RUN pecl update-channels
 RUN pecl install apcu \
     && pecl install xdebug \
     && echo "date.timezone = \"UTC\"" >> /usr/local/etc/php/conf.d/timezone.ini \
+    && echo "xdebug.mode=\${XDEBUG_MODE}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && echo "xdebug.client_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && echo "xdebug.start_with_request=trigger" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && echo "xdebug.trigger_value=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
