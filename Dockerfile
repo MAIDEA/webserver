@@ -41,10 +41,12 @@ ARG XDEBUG_REMOTE_PORT=9003
 ARG XDEBUG_IDE_KEY=PHPSTORM
 ARG XDEBUG_MODE=develop,debug
 ARG XDEBUG_OUTPUT_DIR=/tmp
+ARG XDEBUG_OUTPUT_PROFILE_NAME=cachegrind.out.%p
 
 ENV XDEBUG_MODE ${XDEBUG_MODE}
 ENV XDEBUG_IDE_KEY ${XDEBUG_IDE_KEY}
 ENV XDEBUG_OUTPUT_DIR ${XDEBUG_OUTPUT_DIR}
+ENV XDEBUG_OUTPUT_PROFILE_NAME ${XDEBUG_OUTPUT_PROFILE_NAME}
 
 RUN pecl update-channels
 RUN pecl install apcu \
@@ -55,6 +57,7 @@ RUN pecl install apcu \
     && echo "xdebug.start_with_request=trigger" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && echo "xdebug.trigger_value=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && echo "xdebug.output_dir=\${XDEBUG_OUTPUT_DIR}" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.profiler_output_name=\${XDEBUG_OUTPUT_PROFILE_NAME}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && docker-php-ext-enable xdebug
 
 RUN pecl install -n mcrypt \
