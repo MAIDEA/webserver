@@ -46,7 +46,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libzip-dev \
     libwebp-dev \
     libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/*
 
 # Install mpdecimal from source (required for decimal extension)
 RUN cd /tmp \
@@ -111,6 +114,9 @@ RUN { \
     echo 'session.use_trans_sid = 0'; \
     echo 'session.cache_limiter = nocache'; \
     echo 'session.gc_probability = 0'; \
+    echo 'opcache.enable=0'; # Disable opcache for development \
+    echo 'error_log = /proc/self/fd/2'; # Log errors to stderr \
+    echo 'assert.exception=1'; # Convert assertions to exceptions \
     } > /usr/local/etc/php/conf.d/custom-php.ini \
     && echo "apc.enable_cli=1" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini \
     && echo "apc.shm_size=512M" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
@@ -139,5 +145,8 @@ RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf
 WORKDIR /src
 
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD curl -f http://localhost/ || exit 1
 
 CMD ["apache2-foreground"]
