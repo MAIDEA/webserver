@@ -78,8 +78,8 @@ RUN pecl update-channels \
 RUN { \
     echo 'short_open_tag = On'; \
     echo 'output_buffering = 4096'; \
-    echo 'max_execution_time = 60'; \
-    echo 'max_input_time = 60'; \
+    echo 'max_execution_time = 180'; \
+    echo 'max_input_time = 120'; \
     echo 'memory_limit = ${PHP_MEMORY_LIMIT}'; \
     echo 'error_reporting = E_ALL & ~E_DEPRECATED & ~E_NOTICE & ~E_STRICT'; \
     echo 'display_errors = Off'; \
@@ -156,7 +156,7 @@ WORKDIR /src
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s \
-    CMD curl -f http://localhost/health || exit 1
+    CMD curl -f http://localhost/ || exit 1
 
 EXPOSE 80
 
