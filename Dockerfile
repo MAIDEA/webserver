@@ -1,11 +1,23 @@
 # Build stage for development
 FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm
 
+# Optional image build arguments
+ARG XDEBUG_REMOTE_PORT=9003
+ARG XDEBUG_IDE_KEY=PHPSTORM
+ARG XDEBUG_MODE=develop,debug
+ARG XDEBUG_OUTPUT_DIR=/tmp
+ARG XDEBUG_OUTPUT_PROFILE_NAME=cachegrind.out.%p
+
 # Environment variables
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     PHP_MEMORY_LIMIT=1024M \
-    APACHE_DOCUMENT_ROOT=/src/app/webroot
+    APACHE_DOCUMENT_ROOT=/src/app/webroot \
+    XDEBUG_MODE=${XDEBUG_MODE} \
+    XDEBUG_IDE_KEY=${XDEBUG_IDE_KEY} \
+    XDEBUG_OUTPUT_DIR=${XDEBUG_OUTPUT_DIR} \
+    XDEBUG_OUTPUT_PROFILE_NAME=${XDEBUG_OUTPUT_PROFILE_NAME}
+
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -105,9 +117,11 @@ RUN { \
 
 # Configure XDebug
 RUN echo "xdebug.mode=\${XDEBUG_MODE}" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.client_host=host.docker.internal" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.client_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
     && echo "xdebug.start_with_request=trigger" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.output_dir=/tmp" >> /usr/local/etc/php/conf.d/xdebug.ini
+    && echo "xdebug.trigger_value=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.output_dir=\${XDEBUG_OUTPUT_DIR}" >> /usr/local/etc/php/conf.d/xdebug.ini \
+    && echo "xdebug.profiler_output_name=\${XDEBUG_OUTPUT_PROFILE_NAME}" >> /usr/local/etc/php/conf.d/xdebug.ini
 
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
