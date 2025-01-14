@@ -1,20 +1,18 @@
-FROM php:8.2-apache-bullseye
+# Production image
+FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm
 
-COPY _docker-config/php.ini /usr/local/etc/php/
+# Environment variables
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PHP_MEMORY_LIMIT=1024M \
+    APACHE_DOCUMENT_ROOT=/src/app/webroot
 
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
-
-ENV PHP_MEMORY_LIMIT 1024M
-
-RUN apt-get update && apt-get remove composer && apt-get install -y \
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     curl \
-    git \
     libxml2-dev \
     mariadb-client \
-    libmcrypt-dev \
-    libreadline-dev \
     libicu-dev \
     libc-client-dev \
     libkrb5-dev \
@@ -31,167 +29,135 @@ RUN apt-get update && apt-get remove composer && apt-get install -y \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
     libpng-dev \
-    libmpdec-dev \
     libzip-dev \
     libwebp-dev \
     libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/*
 
-RUN pecl update-channels
-RUN pecl install apcu \
-    && pecl install xdebug \
-    && echo "date.timezone = \"UTC\"" >> /usr/local/etc/php/conf.d/timezone.ini
+# Install mpdecimal from source (required for decimal extension)
+RUN cd /tmp \
+    && curl -LO https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-2.5.1.tar.gz \
+    && echo "9f9cd4c041f99b5c49ffb7b59d9f12d95b683d88585608aa56a6307667b2b21f mpdecimal-2.5.1.tar.gz" | sha256sum --check --status - \
+    && tar xf mpdecimal-2.5.1.tar.gz \
+    && cd mpdecimal-2.5.1 \
+    && ./configure \
+    && make \
+    && make install \
+    && cd .. \
+    && rm -rf mpdecimal-2.5.1*
 
-RUN pecl install -n mcrypt \
-    && pecl install decimal
-
-RUN docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp
-
-RUN docker-php-ext-install -j$(nproc) gd \
-    && docker-php-ext-install intl \
-    && docker-php-ext-install -j$(nproc) pdo_mysql \
-    && docker-php-ext-enable mcrypt \
-    && docker-php-ext-install pcntl \
-    && docker-php-ext-install zip \
-    && docker-php-ext-install bcmath \
-    && docker-php-ext-install shmop \
-    && PHP_OPENSSL=yes docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
-    && docker-php-ext-install imap \
-    && docker-php-ext-install sockets \
-    && docker-php-ext-install soap \
-    && docker-php-ext-install -j$(nproc) opcache \
+# Configure and install PHP extensions
+RUN pecl update-channels \
+    && pecl install apcu decimal imap \
+    && docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-configure opcache --enable-opcache \
     && docker-php-ext-configure pgsql -with-pgsql=/usr/local/pgsql \
-    && docker-php-ext-install pdo pdo_pgsql pgsql \
-    && echo "apc.enable_cli=1" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini \
-    && echo "apc.shm_size=512M" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
+    && docker-php-ext-install -j$(nproc) \
+        gd \
+        intl \
+        pdo_mysql \
+        pcntl \
+        zip \
+        bcmath \
+        shmop \
+        sockets \
+        soap \
+        opcache \
+        pdo \
+        pdo_pgsql \
+        pgsql \
+    && docker-php-ext-enable \
+        apcu \
+        decimal \
+        imap
 
-RUN a2enmod rewrite
+# Production PHP Configuration
+RUN { \
+    echo 'short_open_tag = On'; \
+    echo 'output_buffering = 4096'; \
+    echo 'max_execution_time = 60'; \
+    echo 'max_input_time = 60'; \
+    echo 'memory_limit = ${PHP_MEMORY_LIMIT}'; \
+    echo 'error_reporting = E_ALL & ~E_DEPRECATED & ~E_NOTICE & ~E_STRICT'; \
+    echo 'display_errors = Off'; \
+    echo 'display_startup_errors = Off'; \
+    echo 'log_errors = On'; \
+    echo 'error_log = /dev/stderr'; \
+    echo 'html_errors = Off'; \
+    echo 'default_charset = "UTF-8"'; \
+    echo 'post_max_size = 256M'; \
+    echo 'upload_max_filesize = 256M'; \
+    echo 'max_file_uploads = 20'; \
+    echo 'date.timezone = UTC'; \
+    echo 'variables_order = "EGPCS"'; \
+    echo 'realpath_cache_size = 4096k'; \
+    echo 'realpath_cache_ttl = 600'; \
+    echo 'session.use_strict_mode = 1'; \
+    echo 'session.use_cookies = 1'; \
+    echo 'session.use_only_cookies = 1'; \
+    echo 'session.cookie_secure = 1'; \
+    echo 'session.cookie_httponly = 1'; \
+    echo 'session.use_trans_sid = 0'; \
+    echo 'session.cache_limiter = nocache'; \
+    echo 'session.sid_length = 48'; \
+    echo 'session.sid_bits_per_character = 6'; \
+    } > /usr/local/etc/php/conf.d/custom-php.ini
 
-RUN curl -sS https://getcomposer.org/installer \
-    | php -- --install-dir=/usr/local/bin --filename=composer
+# Configure OpCache for production
+RUN { \
+    echo 'opcache.enable=1'; \
+    echo 'opcache.enable_cli=0'; \
+    echo 'opcache.memory_consumption=256'; \
+    echo 'opcache.max_accelerated_files=20000'; \
+    echo 'opcache.validate_timestamps=0'; \
+    echo 'opcache.revalidate_freq=0'; \
+    echo 'opcache.interned_strings_buffer=16'; \
+    echo 'opcache.fast_shutdown=1'; \
+    echo 'opcache.optimization_level=0x7FFEBFFF'; \
+    echo 'opcache.jit_buffer_size=50M'; \
+    echo 'opcache.jit=1235'; \
+    } > /usr/local/etc/php/conf.d/opcache-recommended.ini
 
-# Download, extract and move wkhtml in place
-WORKDIR /tmp
-RUN curl -S -s -L -o wkhtmltopdf.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-2/wkhtmltox_0.12.6.1-2.bullseye_amd64.deb \
-    && dpkg -i wkhtmltopdf.deb
+# APCu settings
+RUN { \
+    echo 'apc.enable_cli=0'; \
+    echo 'apc.shm_size=512M'; \
+    echo 'apc.ttl=7200'; \
+    } > /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
 
-WORKDIR /src
+# Install Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-#change webroot
-ENV APACHE_DOCUMENT_ROOT /src/app/webroot
+# Install wkhtmltopdf
+RUN curl -S -s -L -o /tmp/wkhtmltopdf.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_amd64.deb \
+    && dpkg -i /tmp/wkhtmltopdf.deb \
+    && rm /tmp/wkhtmltopdf.deb
+
+# Configure Apache
+RUN a2enmod rewrite headers
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
 RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
+# Apache security configuration
+RUN { \
+    echo 'ServerTokens Prod'; \
+    echo 'ServerSignature Off'; \
+    echo 'TraceEnable Off'; \
+    } >> /etc/apache2/apache2.conf
 
+# Set proper permissions
+RUN chown -R www-data:www-data /var/www \
+    && chmod -R 755 /var/www
 
-#  ALL POSSIBLE PHP EXTENSIONS and requirements
-#
-#RUN apt update
-#RUN apt upgrade -y
-#RUN apt install -y apt-utils
-#RUN a2enmod rewrite
-#RUN apt install -y libmcrypt-dev
-#RUN docker-php-ext-install mcrypt
-#RUN apt install -y libicu-dev
-#RUN docker-php-ext-install -j$(nproc) intl
-#RUN apt-get install -y libfreetype6-dev libjpeg62-turbo-dev libpng12-dev
-#RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/
-#RUN docker-php-ext-install -j$(nproc) gd
-#RUN apt install -y php-apc
-#RUN apt install -y libxml2-dev
-#RUN apt install -y libldb-dev
-#RUN apt install -y libldap2-dev
-#RUN apt install -y libxml2-dev
-#RUN apt install -y libssl-dev
-#RUN apt install -y libxslt-dev
-#RUN apt install -y libpq-dev
-#RUN apt install -y postgresql-client
-#RUN apt install -y mysql-client
-#RUN apt install -y libsqlite3-dev
-#RUN apt install -y libsqlite3-0
-#RUN apt install -y libc-client-dev
-#RUN apt install -y libkrb5-dev
-#RUN apt install -y curl
-#RUN apt install -y libcurl3
-#RUN apt install -y libcurl3-dev
-#RUN apt install -y firebird-dev
-#RUN apt-get install -y libpspell-dev
-#RUN apt-get install -y aspell-en
-#RUN apt-get install -y aspell-de
-#RUN apt install -y libtidy-dev
-#RUN apt install -y libsnmp-dev
-#RUN apt install -y librecode0
-#RUN apt install -y librecode-dev
-#RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin/ --filename=composer
-##RUN pecl install apc
-#RUN docker-php-ext-install opcache
-#RUN yes | pecl install xdebug \
-#    && echo "zend_extension=$(find /usr/local/lib/php/extensions/ -name xdebug.so)" > /usr/local/etc/php/conf.d/xdebug.ini \
-#    && echo "xdebug.remote_enable=on" >> /usr/local/etc/php/conf.d/xdebug.ini \
-#    && echo "xdebug.remote_autostart=off" >> /usr/local/etc/php/conf.d/xdebug.ini
-#RUN docker-php-ext-install soap
-#RUN docker-php-ext-install ftp
-#RUN docker-php-ext-install xsl
-#RUN docker-php-ext-install bcmath
-#RUN docker-php-ext-install calendar
-#RUN docker-php-ext-install ctype
-#RUN docker-php-ext-install dba
-#RUN docker-php-ext-install dom
-#RUN docker-php-ext-install zip
-#RUN docker-php-ext-install session
-#RUN docker-php-ext-configure ldap --with-libdir=lib/x86_64-linux-gnu
-#RUN docker-php-ext-install ldap
-#RUN docker-php-ext-install json
-#RUN docker-php-ext-install hash
-#RUN docker-php-ext-install sockets
-#RUN docker-php-ext-install pdo
-#RUN docker-php-ext-install mbstring
-#RUN docker-php-ext-install tokenizer
-#RUN docker-php-ext-install pgsql
-#RUN docker-php-ext-install pdo_pgsql
-#RUN docker-php-ext-install pdo_mysql
-#RUN docker-php-ext-install pdo_sqlite
-#RUN docker-php-ext-install intl
-#RUN docker-php-ext-install mcrypt
-#RUN docker-php-ext-install mysqli
-#RUN docker-php-ext-configure imap --with-kerberos --with-imap-ssl
-#RUN docker-php-ext-install imap
-#RUN docker-php-ext-install gd
-#RUN docker-php-ext-install curl
-#RUN docker-php-ext-install exif
-#RUN docker-php-ext-install fileinfo
-#RUN docker-php-ext-install gettext
-##RUN apt install -y libgmp-dev # idk
-##RUN docker-php-ext-install gmp # idk
-#RUN docker-php-ext-install iconv
-#RUN docker-php-ext-install interbase
-#RUN docker-php-ext-install pdo_firebird
-#RUN docker-php-ext-install opcache
-##RUN docker-php-ext-install oci8 # idk
-##RUN docker-php-ext-install odbc # idk
-#RUN docker-php-ext-install pcntl
-##RUN apt install -y freetds-dev # idk
-##RUN docker-php-ext-install pdo_dblib  # idk
-##RUN docker-php-ext-install pdo_oci # idk
-##RUN docker-php-ext-install pdo_odbc # idk
-#RUN docker-php-ext-install phar
-#RUN docker-php-ext-install posix
-#RUN docker-php-ext-install pspell
-##RUN apt install -y libreadline-dev # idk
-##RUN docker-php-ext-install readline # idk
-#RUN docker-php-ext-install recode
-#RUN docker-php-ext-install shmop
-#RUN docker-php-ext-install simplexml
-#RUN docker-php-ext-install snmp
-#RUN docker-php-ext-install sysvmsg
-#RUN docker-php-ext-install sysvsem
-#RUN docker-php-ext-install sysvshm
-#RUN docker-php-ext-install tidy
-#RUN docker-php-ext-install wddx
-#RUN docker-php-ext-install xml
-##RUN apt install -y libxml2-dev # idk
-##RUN docker-php-ext-install xmlreader # idk
-#RUN docker-php-ext-install xmlrpc
-#RUN docker-php-ext-install xmlwriter
-## idk bz2 enchant
+WORKDIR /src
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD curl -f http://localhost/health || exit 1
+
+EXPOSE 80
+
+CMD ["apache2-foreground"]
