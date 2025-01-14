@@ -1,5 +1,5 @@
-# Build stage for development
-FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm
+# Build stage
+FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm as builder
 
 # Optional image build arguments
 ARG XDEBUG_REMOTE_PORT=9003
@@ -8,50 +8,26 @@ ARG XDEBUG_MODE=develop,debug
 ARG XDEBUG_OUTPUT_DIR=/tmp
 ARG XDEBUG_OUTPUT_PROFILE_NAME=cachegrind.out.%p
 
-# Environment variables
-ENV LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8 \
-    PHP_MEMORY_LIMIT=1024M \
-    APACHE_DOCUMENT_ROOT=/src/app/webroot \
-    XDEBUG_MODE=${XDEBUG_MODE} \
-    XDEBUG_IDE_KEY=${XDEBUG_IDE_KEY} \
-    XDEBUG_OUTPUT_DIR=${XDEBUG_OUTPUT_DIR} \
-    XDEBUG_OUTPUT_PROFILE_NAME=${XDEBUG_OUTPUT_PROFILE_NAME}
-
-
-# Install system dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     curl \
     git \
     libxml2-dev \
-    mariadb-client \
-    libreadline-dev \
     libicu-dev \
     libc-client-dev \
     libkrb5-dev \
     libpng-dev \
-    libfontconfig \
-    zlib1g \
-    libfreetype6 \
-    libxrender1 \
-    libxext6 \
-    libx11-6 \
-    fontconfig \
-    xfonts-base \
-    xfonts-75dpi \
     libfreetype6-dev \
     libjpeg62-turbo-dev \
-    libpng-dev \
     libzip-dev \
     libwebp-dev \
     libpq-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /tmp/* \
-    && rm -rf /var/tmp/*
+    make \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install mpdecimal from source (required for decimal extension)
+# Install mpdecimal from source
 RUN cd /tmp \
     && curl -LO https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-2.5.1.tar.gz \
     && echo "9f9cd4c041f99b5c49ffb7b59d9f12d95b683d88585608aa56a6307667b2b21f mpdecimal-2.5.1.tar.gz" | sha256sum --check --status - \
@@ -63,7 +39,7 @@ RUN cd /tmp \
     && cd .. \
     && rm -rf mpdecimal-2.5.1*
 
-# Configure and install PHP extensions
+# Build and configure PHP extensions
 RUN pecl update-channels \
     && pecl install apcu xdebug decimal imap \
     && docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp \
@@ -82,14 +58,74 @@ RUN pecl update-channels \
         opcache \
         pdo \
         pdo_pgsql \
-        pgsql \
-    && docker-php-ext-enable \
-        xdebug \
-        apcu \
-        decimal \
-        imap
+        pgsql
 
-# PHP Configuration
+# Final stage
+FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm
+
+# Environment variables
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PHP_MEMORY_LIMIT=1024M \
+    APACHE_DOCUMENT_ROOT=/src/app/webroot \
+    XDEBUG_MODE=${XDEBUG_MODE} \
+    XDEBUG_IDE_KEY=${XDEBUG_IDE_KEY} \
+    XDEBUG_OUTPUT_DIR=${XDEBUG_OUTPUT_DIR} \
+    XDEBUG_OUTPUT_PROFILE_NAME=${XDEBUG_OUTPUT_PROFILE_NAME}
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    libxml2 \
+    mariadb-client \
+    libicu72 \
+    libc-client2007e \
+    libkrb5-3 \
+    libpng16-16 \
+    libfontconfig1 \
+    zlib1g \
+    libfreetype6 \
+    libxrender1 \
+    libxext6 \
+    libx11-6 \
+    fontconfig \
+    xfonts-base \
+    xfonts-75dpi \
+    libwebp7 \
+    libpq5 \
+    libjpeg62-turbo \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/*
+
+# Copy built extensions and configurations from builder
+COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
+COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
+COPY --from=builder /usr/local/lib/libmpdec* /usr/local/lib/
+COPY --from=builder /usr/local/include/mpdecimal* /usr/local/include/
+
+# Enable PHP extensions
+RUN docker-php-ext-enable \
+    apcu \
+    decimal \
+    imap \
+    gd \
+    intl \
+    pdo_mysql \
+    pcntl \
+    zip \
+    bcmath \
+    shmop \
+    sockets \
+    soap \
+    opcache \
+    pdo \
+    pdo_pgsql \
+    pgsql \
+    xdebug
+
+# Development PHP Configuration
 RUN { \
     echo 'short_open_tag = On'; \
     echo 'output_buffering = 4096'; \
@@ -114,20 +150,29 @@ RUN { \
     echo 'session.use_trans_sid = 0'; \
     echo 'session.cache_limiter = nocache'; \
     echo 'session.gc_probability = 0'; \
-    echo 'opcache.enable=0'; # Disable opcache for development \
-    echo 'error_log = /proc/self/fd/2'; # Log errors to stderr \
-    echo 'assert.exception=1'; # Convert assertions to exceptions \
-    } > /usr/local/etc/php/conf.d/custom-php.ini \
-    && echo "apc.enable_cli=1" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini \
-    && echo "apc.shm_size=512M" >> /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
+    echo 'opcache.enable=0'; \
+    echo 'error_log = /proc/self/fd/2'; \
+    echo 'assert.exception=1'; \
+    } > /usr/local/etc/php/conf.d/custom-php.ini
+
+# Configure APCu for development
+RUN { \
+    echo 'apc.enable_cli=1'; \
+    echo 'apc.shm_size=512M'; \
+    } > /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
 
 # Configure XDebug
-RUN echo "xdebug.mode=\${XDEBUG_MODE}" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.client_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.start_with_request=trigger" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.trigger_value=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.output_dir=\${XDEBUG_OUTPUT_DIR}" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.profiler_output_name=\${XDEBUG_OUTPUT_PROFILE_NAME}" >> /usr/local/etc/php/conf.d/xdebug.ini
+RUN { \
+    echo "xdebug.mode=\${XDEBUG_MODE}"; \
+    echo "xdebug.client_host=\${XDEBUG_REMOTE_HOST}"; \
+    echo "xdebug.start_with_request=trigger"; \
+    echo "xdebug.trigger_value=\${XDEBUG_IDE_KEY}"; \
+    echo "xdebug.output_dir=\${XDEBUG_OUTPUT_DIR}"; \
+    echo "xdebug.profiler_output_name=\${XDEBUG_OUTPUT_PROFILE_NAME}"; \
+    echo "xdebug.log=/var/log/xdebug.log"; \
+    echo "xdebug.client_port=${XDEBUG_REMOTE_PORT}"; \
+    echo "xdebug.max_nesting_level=500"; \
+    } > /usr/local/etc/php/conf.d/xdebug.ini
 
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
