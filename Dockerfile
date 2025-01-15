@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     make \
     gcc \
+    libzip-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install mpdecimal from source
@@ -94,6 +95,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwebp7 \
     libpq5 \
     libjpeg62-turbo \
+    libzip-dev \
+    unzip \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /tmp/* \
