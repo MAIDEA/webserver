@@ -1,7 +1,7 @@
 ARG BUILDPLATFORM=linux/amd64
 
 # Build stage
-FROM --platform=${BUILDPLATFORM} php:5.6-apache AS builder
+FROM --platform=${BUILDPLATFORM} php:5.6-apache-stretch AS builder
 
 # Update sources to use archive
 RUN sed -i -e 's/deb.debian.org/archive.debian.org/g' \
@@ -55,7 +55,7 @@ RUN docker-php-ext-configure gd \
     && pecl install xdebug-2.5.5
 
 # Final stage
-FROM --platform=${BUILDPLATFORM} php:5.6-apache
+FROM --platform=${BUILDPLATFORM} php:5.6-apache-stretch
 
 # Update sources to use archive
 RUN sed -i -e 's/deb.debian.org/archive.debian.org/g' \
@@ -99,7 +99,9 @@ COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions
 COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
 
 # Enable PHP extensions and configure PHP
-RUN docker-php-ext-enable \
+RUN docker-php-ext-install sockets \
+    && docker-php-ext-install json \
+    && docker-php-ext-enable \
     xdebug \
     intl \
     pdo_mysql \
@@ -142,8 +144,6 @@ RUN { \
     echo 'session.gc_probability = 0'; \
     echo 'error_log = /proc/self/fd/2'; \
     } > /usr/local/etc/php/conf.d/custom-php.ini
-    && docker-php-ext-install sockets
-    && docker-php-ext-install json 
 
 # Configure XDebug
 RUN { \
