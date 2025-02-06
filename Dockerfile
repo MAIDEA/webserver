@@ -1,18 +1,84 @@
-FROM php:5.6-apache
+ARG BUILDPLATFORM=linux/amd64
 
-COPY _docker-config/php.ini /usr/local/etc/php/
+# Build stage
+FROM --platform=${BUILDPLATFORM} php:5.6-apache AS builder
 
-RUN apt-get update && apt-get install -y \
+# Update sources to use archive
+RUN sed -i -e 's/deb.debian.org/archive.debian.org/g' \
+    -e 's/security.debian.org/archive.debian.org/g' \
+    -e '/stretch-updates/d' /etc/apt/sources.list
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
     curl \
     git \
     libxml2-dev \
-    mysql-client \
     libmcrypt-dev \
     libicu-dev \
     libc-client-dev \
     libkrb5-dev \
     libpng-dev \
-    libfontconfig \
+    libfreetype6-dev \
+    libjpeg62-turbo-dev \
+    libzip-dev \
+    make \
+    gcc \
+    g++ \
+    libtool \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build and configure PHP extensions
+RUN docker-php-ext-configure gd \
+        --with-gd \
+        --with-png-dir=/usr/include \
+        --with-jpeg-dir=/usr/include \
+        --with-freetype-dir=/usr/include \
+    && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
+    && docker-php-ext-install -j$(nproc) \
+        mcrypt \
+        pcntl \
+        zip \
+        bcmath \
+        mbstring \
+        iconv \
+        soap \
+        shmop \
+        imap \
+        sockets \
+        pdo_mysql \
+        gd \
+    && docker-php-ext-configure intl \
+    && docker-php-ext-install intl \
+    && pecl update-channels \
+    && pecl install xdebug-2.5.5
+
+# Final stage
+FROM --platform=${BUILDPLATFORM} php:5.6-apache
+
+# Update sources to use archive
+RUN sed -i -e 's/deb.debian.org/archive.debian.org/g' \
+    -e 's/security.debian.org/archive.debian.org/g' \
+    -e '/stretch-updates/d' /etc/apt/sources.list
+
+# Environment variables
+ENV APACHE_DOCUMENT_ROOT=/src/app/webroot \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PHP_MEMORY_LIMIT=1024M
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    mysql-client \
+    libxml2 \
+    libmcrypt4 \
+    libicu57 \
+    libc-client2007e \
+    libkrb5-3 \
+    libpng16-16 \
+    libfontconfig1 \
     zlib1g \
     libfreetype6 \
     libxrender1 \
@@ -22,162 +88,92 @@ RUN apt-get update && apt-get install -y \
     xfonts-base \
     xfonts-75dpi \
     libfreetype6-dev \
-    libjpeg62-turbo-dev
+    libjpeg62-turbo \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/*
 
-RUN pecl update-channels
-RUN pecl install channel://pecl.php.net/xdebug-2.5.5 \
-    && echo "date.timezone = \"UTC\"" >> /usr/local/etc/php/conf.d/timezone.ini \
-    && echo "xdebug.remote_enable=on" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.remote_host=\${XDEBUG_REMOTE_HOST}" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && echo "xdebug.idekey=\${XDEBUG_IDE_KEY}" >> /usr/local/etc/php/conf.d/xdebug.ini \
-    && docker-php-ext-enable xdebug
+# Copy built extensions and configurations from builder
+COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
+COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
 
-RUN docker-php-ext-install intl \
-    && docker-php-ext-install pdo_mysql \
-    && docker-php-ext-install mcrypt \
-    && docker-php-ext-install pcntl \
-    && docker-php-ext-install zip \
-    && docker-php-ext-install bcmath \
-    && docker-php-ext-install mbstring \
-    && docker-php-ext-install iconv \
-    && docker-php-ext-install soap \
-    && docker-php-ext-install shmop \
-    && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
-    && docker-php-ext-install imap \
-    && docker-php-ext-install sockets \
+# Enable PHP extensions and configure PHP
+RUN docker-php-ext-enable \
+    xdebug \
+    intl \
+    pdo_mysql \
+    mcrypt \
+    pcntl \
+    zip \
+    bcmath \
+    mbstring \
+    iconv \
+    soap \
+    shmop \
+    imap \
+    sockets \
+    gd
+
+# PHP Configuration
+RUN { \
+    echo 'short_open_tag = On'; \
+    echo 'output_buffering = 4096'; \
+    echo 'max_execution_time = 180'; \
+    echo 'max_input_time = 120'; \
+    echo 'memory_limit = ${PHP_MEMORY_LIMIT}'; \
+    echo 'error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT'; \
+    echo 'display_errors = On'; \
+    echo 'display_startup_errors = On'; \
+    echo 'log_errors = On'; \
+    echo 'log_errors_max_len = 1024'; \
+    echo 'html_errors = On'; \
+    echo 'default_charset = "UTF-8"'; \
+    echo 'post_max_size = 128M'; \
+    echo 'upload_max_filesize = 128M'; \
+    echo 'max_file_uploads = 20'; \
+    echo 'date.timezone = UTC'; \
+    echo 'session.use_strict_mode = 0'; \
+    echo 'session.use_cookies = 1'; \
+    echo 'session.use_only_cookies = 1'; \
+    echo 'session.cookie_secure = 0'; \
+    echo 'session.use_trans_sid = 0'; \
+    echo 'session.cache_limiter = nocache'; \
+    echo 'session.gc_probability = 0'; \
+    echo 'error_log = /proc/self/fd/2'; \
+    } > /usr/local/etc/php/conf.d/custom-php.ini
+    && docker-php-ext-install sockets
     && docker-php-ext-install json 
 
-RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/ \
-    && docker-php-ext-install -j$(nproc) gd
+# Configure XDebug
+RUN { \
+    echo "xdebug.remote_enable=on"; \
+    echo "xdebug.remote_host=\${XDEBUG_REMOTE_HOST}"; \
+    echo "xdebug.idekey=\${XDEBUG_IDE_KEY}"; \
+    } > /usr/local/etc/php/conf.d/xdebug.ini
 
-RUN a2enmod rewrite
-
+# Install Composer
 RUN curl -sS https://getcomposer.org/installer \
     | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Download, extract and move wkhtml in place
+# Install wkhtmltopdf
 WORKDIR /tmp
 RUN curl -S -s -L -o wkhtmltopdf.tar.xz http://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.4/wkhtmltox-0.12.4_linux-generic-amd64.tar.xz \
     && tar -xvf wkhtmltopdf.tar.xz \
     && mv wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf \
-    && chmod +x /usr/local/bin/wkhtmltopdf
+    && chmod +x /usr/local/bin/wkhtmltopdf \
+    && rm -rf /tmp/*
+
+# Configure Apache
+RUN a2enmod rewrite \
+    && sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
+    && sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
 WORKDIR /src
 
-#change webroot
-ENV APACHE_DOCUMENT_ROOT /src/app/webroot
-RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
-RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+EXPOSE 80
 
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD curl -f http://localhost/ || exit 1
 
-
-#  ALL POSSIBLE PHP EXTENSIONS and requirements
-#
-#RUN apt update
-#RUN apt upgrade -y
-#RUN apt install -y apt-utils
-#RUN a2enmod rewrite
-#RUN apt install -y libmcrypt-dev
-#RUN docker-php-ext-install mcrypt
-#RUN apt install -y libicu-dev
-#RUN docker-php-ext-install -j$(nproc) intl
-#RUN apt-get install -y libfreetype6-dev libjpeg62-turbo-dev libpng12-dev
-#RUN docker-php-ext-configure gd --with-freetype-dir=/usr/include/ --with-jpeg-dir=/usr/include/
-#RUN docker-php-ext-install -j$(nproc) gd
-#RUN apt install -y php-apc
-#RUN apt install -y libxml2-dev
-#RUN apt install -y libldb-dev
-#RUN apt install -y libldap2-dev
-#RUN apt install -y libxml2-dev
-#RUN apt install -y libssl-dev
-#RUN apt install -y libxslt-dev
-#RUN apt install -y libpq-dev
-#RUN apt install -y postgresql-client
-#RUN apt install -y mysql-client
-#RUN apt install -y libsqlite3-dev
-#RUN apt install -y libsqlite3-0
-#RUN apt install -y libc-client-dev
-#RUN apt install -y libkrb5-dev
-#RUN apt install -y curl
-#RUN apt install -y libcurl3
-#RUN apt install -y libcurl3-dev
-#RUN apt install -y firebird-dev
-#RUN apt-get install -y libpspell-dev
-#RUN apt-get install -y aspell-en
-#RUN apt-get install -y aspell-de
-#RUN apt install -y libtidy-dev
-#RUN apt install -y libsnmp-dev
-#RUN apt install -y librecode0
-#RUN apt install -y librecode-dev
-#RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin/ --filename=composer
-##RUN pecl install apc
-#RUN docker-php-ext-install opcache
-#RUN yes | pecl install xdebug \
-#    && echo "zend_extension=$(find /usr/local/lib/php/extensions/ -name xdebug.so)" > /usr/local/etc/php/conf.d/xdebug.ini \
-#    && echo "xdebug.remote_enable=on" >> /usr/local/etc/php/conf.d/xdebug.ini \
-#    && echo "xdebug.remote_autostart=off" >> /usr/local/etc/php/conf.d/xdebug.ini
-#RUN docker-php-ext-install soap
-#RUN docker-php-ext-install ftp
-#RUN docker-php-ext-install xsl
-#RUN docker-php-ext-install bcmath
-#RUN docker-php-ext-install calendar
-#RUN docker-php-ext-install ctype
-#RUN docker-php-ext-install dba
-#RUN docker-php-ext-install dom
-#RUN docker-php-ext-install zip
-#RUN docker-php-ext-install session
-#RUN docker-php-ext-configure ldap --with-libdir=lib/x86_64-linux-gnu
-#RUN docker-php-ext-install ldap
-#RUN docker-php-ext-install json
-#RUN docker-php-ext-install hash
-#RUN docker-php-ext-install sockets
-#RUN docker-php-ext-install pdo
-#RUN docker-php-ext-install mbstring
-#RUN docker-php-ext-install tokenizer
-#RUN docker-php-ext-install pgsql
-#RUN docker-php-ext-install pdo_pgsql
-#RUN docker-php-ext-install pdo_mysql
-#RUN docker-php-ext-install pdo_sqlite
-#RUN docker-php-ext-install intl
-#RUN docker-php-ext-install mcrypt
-#RUN docker-php-ext-install mysqli
-#RUN docker-php-ext-configure imap --with-kerberos --with-imap-ssl
-#RUN docker-php-ext-install imap
-#RUN docker-php-ext-install gd
-#RUN docker-php-ext-install curl
-#RUN docker-php-ext-install exif
-#RUN docker-php-ext-install fileinfo
-#RUN docker-php-ext-install gettext
-##RUN apt install -y libgmp-dev # idk
-##RUN docker-php-ext-install gmp # idk
-#RUN docker-php-ext-install iconv
-#RUN docker-php-ext-install interbase
-#RUN docker-php-ext-install pdo_firebird
-#RUN docker-php-ext-install opcache
-##RUN docker-php-ext-install oci8 # idk
-##RUN docker-php-ext-install odbc # idk
-#RUN docker-php-ext-install pcntl
-##RUN apt install -y freetds-dev # idk
-##RUN docker-php-ext-install pdo_dblib  # idk
-##RUN docker-php-ext-install pdo_oci # idk
-##RUN docker-php-ext-install pdo_odbc # idk
-#RUN docker-php-ext-install phar
-#RUN docker-php-ext-install posix
-#RUN docker-php-ext-install pspell
-##RUN apt install -y libreadline-dev # idk
-##RUN docker-php-ext-install readline # idk
-#RUN docker-php-ext-install recode
-#RUN docker-php-ext-install shmop
-#RUN docker-php-ext-install simplexml
-#RUN docker-php-ext-install snmp
-#RUN docker-php-ext-install sysvmsg
-#RUN docker-php-ext-install sysvsem
-#RUN docker-php-ext-install sysvshm
-#RUN docker-php-ext-install tidy
-#RUN docker-php-ext-install wddx
-#RUN docker-php-ext-install xml
-##RUN apt install -y libxml2-dev # idk
-##RUN docker-php-ext-install xmlreader # idk
-#RUN docker-php-ext-install xmlrpc
-#RUN docker-php-ext-install xmlwriter
-## idk bz2 enchant
+CMD ["apache2-foreground"]
