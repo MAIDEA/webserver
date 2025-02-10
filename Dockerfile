@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     libtool \
     zlib1g-dev \
+    mysql-client \
+    default-libmysqlclient-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Build and configure PHP extensions
@@ -36,6 +38,8 @@ RUN docker-php-ext-configure gd \
         --with-jpeg-dir=/usr/include \
         --with-freetype-dir=/usr/include \
     && docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
+    && docker-php-ext-configure mysql --with-mysql=/usr/ \
+    && docker-php-ext-configure mysqli --with-mysqli=/usr/bin/mysql_config \
     && docker-php-ext-install -j$(nproc) \
         mcrypt \
         pcntl \
@@ -47,6 +51,8 @@ RUN docker-php-ext-configure gd \
         shmop \
         imap \
         sockets \
+        mysql \
+        mysqli \
         pdo_mysql \
         gd \
     && docker-php-ext-configure intl \
@@ -98,12 +104,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
 
-# Enable PHP extensions and configure PHP
-RUN docker-php-ext-install sockets \
-    && docker-php-ext-install json \
-    && docker-php-ext-enable \
+# Enable PHP extensions
+RUN docker-php-ext-enable \
     xdebug \
     intl \
+    mysql \
+    mysqli \
     pdo_mysql \
     mcrypt \
     pcntl \
