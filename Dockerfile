@@ -77,6 +77,7 @@ ENV APACHE_DOCUMENT_ROOT=/src/app/webroot \
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
+    libmariadbclient18 \
     mysql-client \
     libxml2 \
     libmcrypt4 \
