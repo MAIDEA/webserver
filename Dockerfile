@@ -1,12 +1,7 @@
-# Build stage
-FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm as builder
+ARG TARGET_PLATFORM=linux/amd64
 
-# Optional image build arguments
-ARG XDEBUG_REMOTE_PORT=9003
-ARG XDEBUG_IDE_KEY=PHPSTORM
-ARG XDEBUG_MODE=develop,debug
-ARG XDEBUG_OUTPUT_DIR=/tmp
-ARG XDEBUG_OUTPUT_PROFILE_NAME=cachegrind.out.%p
+# Build stage
+FROM --platform=${TARGET_PLATFORM} php:8.4-apache-bookworm as builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -64,17 +59,25 @@ RUN pecl update-channels \
 # Final stage
 FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm
 
-# Environment variables
+# Declare build stage args for use in ENV
+ARG XDEBUG_REMOTE_PORT=9003
+ARG XDEBUG_IDE_KEY=PHPSTORM
+ARG XDEBUG_MODE=develop,debug
+ARG XDEBUG_OUTPUT_DIR=/tmp
+ARG XDEBUG_OUTPUT_PROFILE_NAME=cachegrind.out.%p
+ARG APACHE_DOCUMENT_ROOT=/src/app/webroot
+
+# Set environment variables with defaults applied correctly
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     PHP_MEMORY_LIMIT=1024M \
-    APACHE_DOCUMENT_ROOT=/src/app/webroot \
-    XDEBUG_MODE=${XDEBUG_MODE} \
+    XDEBUG_REMOTE_PORT=${XDEBUG_REMOTE_PORT} \
     XDEBUG_IDE_KEY=${XDEBUG_IDE_KEY} \
+    XDEBUG_MODE=${XDEBUG_MODE} \
     XDEBUG_OUTPUT_DIR=${XDEBUG_OUTPUT_DIR} \
     XDEBUG_OUTPUT_PROFILE_NAME=${XDEBUG_OUTPUT_PROFILE_NAME}
 
-# Install runtime dependencies only
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     libxml2 \
@@ -134,7 +137,7 @@ RUN { \
     echo 'output_buffering = 4096'; \
     echo 'max_execution_time = 180'; \
     echo 'max_input_time = 120'; \
-    echo 'memory_limit = ${PHP_MEMORY_LIMIT}'; \
+    echo 'memory_limit = \${PHP_MEMORY_LIMIT}'; \
     echo 'error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT'; \
     echo 'display_errors = On'; \
     echo 'display_startup_errors = On'; \
@@ -173,7 +176,7 @@ RUN { \
     echo "xdebug.output_dir=\${XDEBUG_OUTPUT_DIR}"; \
     echo "xdebug.profiler_output_name=\${XDEBUG_OUTPUT_PROFILE_NAME}"; \
     echo "xdebug.log=/var/log/xdebug.log"; \
-    echo "xdebug.client_port=${XDEBUG_REMOTE_PORT}"; \
+    echo "xdebug.client_port=\${XDEBUG_REMOTE_PORT}"; \
     echo "xdebug.max_nesting_level=500"; \
     } > /usr/local/etc/php/conf.d/xdebug.ini
 
