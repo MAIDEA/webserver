@@ -175,7 +175,6 @@ RUN { \
     echo "xdebug.trigger_value=\${XDEBUG_IDE_KEY}"; \
     echo "xdebug.output_dir=\${XDEBUG_OUTPUT_DIR}"; \
     echo "xdebug.profiler_output_name=\${XDEBUG_OUTPUT_PROFILE_NAME}"; \
-    echo "xdebug.log=/var/log/xdebug.log"; \
     echo "xdebug.client_port=\${XDEBUG_REMOTE_PORT}"; \
     echo "xdebug.max_nesting_level=500"; \
     } > /usr/local/etc/php/conf.d/xdebug.ini
