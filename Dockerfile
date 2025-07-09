@@ -1,5 +1,5 @@
 # Build stage
-FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm as builder
+FROM --platform=${BUILDPLATFORM} php:8.3-apache-bookworm as builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -54,7 +54,7 @@ RUN pecl update-channels \
         pgsql
 
 # Final stage
-FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm
+FROM --platform=${BUILDPLATFORM} php:8.3-apache-bookworm
 
 # Environment variables
 ENV LANG=C.UTF-8 \
