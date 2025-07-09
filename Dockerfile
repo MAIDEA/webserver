@@ -163,6 +163,7 @@ RUN { \
 
 # APCu settings
 RUN { \
+    echo 'extension=apcu.so'; \
     echo 'apc.enable_cli=0'; \
     echo 'apc.shm_size=512M'; \
     echo 'apc.ttl=7200'; \
