@@ -1,7 +1,7 @@
 ARG TARGET_PLATFORM=linux/amd64
 
 # Build stage
-FROM --platform=${TARGET_PLATFORM} php:8.4-apache-bookworm as builder
+FROM --platform=${TARGET_PLATFORM} php:8.3-apache-bookworm as builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -57,7 +57,7 @@ RUN pecl update-channels \
         pgsql
 
 # Final stage
-FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm
+FROM --platform=${BUILDPLATFORM} php:8.3-apache-bookworm
 
 # Declare build stage args for use in ENV
 ARG XDEBUG_REMOTE_PORT=9003
@@ -163,6 +163,7 @@ RUN { \
 
 # Configure APCu for development
 RUN { \
+    echo 'extension=apcu.so'; \
     echo 'apc.enable_cli=1'; \
     echo 'apc.shm_size=512M'; \
     } > /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
