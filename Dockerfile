@@ -137,7 +137,7 @@ RUN { \
     echo 'output_buffering = 4096'; \
     echo 'max_execution_time = 180'; \
     echo 'max_input_time = 120'; \
-    echo 'memory_limit = \${PHP_MEMORY_LIMIT}'; \
+    echo 'memory_limit = ${PHP_MEMORY_LIMIT}'; \
     echo 'error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT'; \
     echo 'display_errors = On'; \
     echo 'display_startup_errors = On'; \
