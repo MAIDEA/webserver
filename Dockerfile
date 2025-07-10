@@ -60,6 +60,7 @@ FROM --platform=${BUILDPLATFORM} php:8.4-apache-bookworm
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     PHP_MEMORY_LIMIT=1024M \
+    SESSION_COOKIE_SECURE=1 \
     APACHE_DOCUMENT_ROOT=/src/app/webroot
 
 # Install runtime dependencies only
@@ -138,7 +139,7 @@ RUN { \
     echo 'session.use_strict_mode = 1'; \
     echo 'session.use_cookies = 1'; \
     echo 'session.use_only_cookies = 1'; \
-    echo 'session.cookie_secure = 1'; \
+    echo 'session.cookie_secure = ${SESSION_COOKIE_SECURE}'; \
     echo 'session.cookie_httponly = 1'; \
     echo 'session.use_trans_sid = 0'; \
     echo 'session.cache_limiter = nocache'; \
