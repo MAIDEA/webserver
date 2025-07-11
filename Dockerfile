@@ -143,8 +143,6 @@ RUN { \
     echo 'session.cookie_httponly = 1'; \
     echo 'session.use_trans_sid = 0'; \
     echo 'session.cache_limiter = nocache'; \
-    echo 'session.sid_length = 48'; \
-    echo 'session.sid_bits_per_character = 6'; \
     } > /usr/local/etc/php/conf.d/custom-php.ini
 
 # Configure OpCache for production
