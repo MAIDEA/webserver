@@ -176,6 +176,15 @@ RUN curl -S -s -L -o /tmp/wkhtmltopdf.deb https://github.com/wkhtmltopdf/packagi
 RUN a2enmod rewrite headers
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
 RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+RUN mkdir -p /var/www/healthcheck \
+    && printf 'ok\n' > /var/www/healthcheck/healthz.txt
+RUN { \
+    echo 'Alias /healthz /var/www/healthcheck/healthz.txt'; \
+    echo '<Location /healthz>'; \
+    echo '    Require all granted'; \
+    echo '</Location>'; \
+    } > /etc/apache2/conf-available/healthcheck.conf \
+    && a2enconf healthcheck
 
 # Apache security configuration
 RUN { \
@@ -191,7 +200,7 @@ RUN chown -R www-data:www-data /var/www \
 WORKDIR /src
 
 HEALTHCHECK --interval=30s --timeout=3s \
-    CMD curl -f http://localhost || exit 1
+    CMD curl -fsS http://localhost/healthz || exit 1
 
 EXPOSE 80
 
