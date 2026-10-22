@@ -1,0 +1,11 @@
+Copyright (c) 2026 MAIDEA. All rights reserved.
+
+The source code in this repository is published for reference only. No license is granted to copy,
+modify or redistribute it.
+
+The Docker images built from it are provided "as is", without warranty of any kind, express or
+implied, and without support, on a best-effort basis. In no event shall MAIDEA be liable for any
+claim, damages or other liability arising from the use of the images or the source code.
+
+Third-party software included in the images (such as Debian, PHP, Apache HTTP Server, PECL
+extensions, Composer and wkhtmltopdf) is covered by its own licenses.

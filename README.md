@@ -3,8 +3,18 @@
 Apache + PHP (mod_php) Docker images for running a PHP app mounted as a volume: mount the app, start the container, done.
 Built for the CakePHP layout (document root `/src/app/webroot`), but works with any PHP app.
 
-* Docker Hub: [`maidea/webserver`](https://hub.docker.com/r/maidea/webserver)
-* Based on the official [`php:<version>-apache-bookworm`](https://hub.docker.com/_/php) images (Debian 12), `linux/amd64`
+* Docker Hub: [`maidea/webserver`](https://hub.docker.com/r/maidea/webserver), source: [MAIDEA/webserver](https://github.com/MAIDEA/webserver)
+* Based on the official [`php:<version>-apache-bookworm`](https://hub.docker.com/_/php) images (Debian 12)
+* `linux/amd64` only (runs through emulation on Apple Silicon)
+* Maintained for our own projects and offered to the public as-is, on a best-effort basis (see [Support and license](#support-and-license))
+
+## Quick start
+
+```sh
+docker run --rm -p 8080:80 -v "$PWD/src:/src" maidea/webserver:prod-apache-php8.4
+```
+
+Serves `./src/app/webroot` on http://localhost:8080. For other layouts set `APACHE_DOCUMENT_ROOT` (see [Configuration](#configuration)).
 
 ## Tags
 
@@ -15,20 +25,16 @@ Built for the CakePHP layout (document root `/src/app/webroot`), but works with 
 | `dev-apache-php`, `dev-apache-php8`, `dev-apache-php8.4` | 8.4 | dev |
 | `dev-apache-php8.3` | 8.3 | dev |
 
-These tags are updated with PHP patch releases.
-Each build is also pushed under an immutable tag, `<tag>-<php version>-<build date>`
-(e.g. `prod-apache-php8.4.27-20261022`), which is never overwritten: pin it for reproducible deploys or to roll back.
+Which tag to use:
 
-**Legacy tags** are frozen, receive no updates, and run end-of-life PHP versions with known vulnerabilities.
-Use them only for internal projects that have not been migrated yet, and never expose them to the internet:
+* **`prod-apache-php8.4`, `dev-apache-php8.3`, …** stay on that PHP version and only receive patch releases. Recommended.
+* **`latest`, `prod-apache-php`, `prod-apache-php8`, `dev-apache-php`, `dev-apache-php8`** move to the newest PHP version when one is added
+  (e.g. 8.5), which can break your app.
+* **Immutable tags** `<tag>-<php version>-<build date>` (e.g. `prod-apache-php8.4.27-20261022`) are never overwritten:
+  pin one for reproducible deploys or to roll back.
 
-| PHP | Tags |
-|---|---|
-| 8.2.10 | `dev-apache-php8.2`, `prod-apache-php8.2` |
-| 7.4 | `dev-apache-php7`, `dev-apache-php7.4`, `prod-apache-php7`, `prod-apache-php7.4`, `dev-apache-php7-x3`, `dev-apache-php7-x3-pgsql` |
-| 7.0–7.3 | `dev_apache_php7`, `dev-apache-php7.0`, `dev-apache-php7.2`, `dev-apache-php7-wpdf0.12.5`, `prod-apache-php7.3` |
-| 5.6 | `dev-apache-php5`, `dev-apache-php5.6`, `dev`, `dev1.4-apache-php5.6`, `dev1.6-apache-php5.6`, `dev1.7-apache-php5.6` |
-| nginx + php-fpm (2017) | `1`, `2` |
+The images are updated with PHP patch releases.
+Older PHP versions are listed under [Legacy tags](#legacy-tags).
 
 ## Variants
 
@@ -49,7 +55,8 @@ Use them only for internal projects that have not been migrated yet, and never e
 
 * PHP extensions: apcu, bcmath, decimal, gd (freetype, jpeg, webp), imap, intl, opcache, pcntl, pdo_mysql, pdo_pgsql, pgsql, shmop, soap, sockets, zip,
   plus the extensions built into the official image (curl, mbstring, …); xdebug in dev
-* wkhtmltopdf 0.12.6.1 (patched qt) at `/usr/local/bin/wkhtmltopdf`
+* wkhtmltopdf 0.12.6.1 (patched qt) at `/usr/local/bin/wkhtmltopdf`.
+  It is no longer maintained upstream and uses an old browser engine: do not render untrusted HTML or URLs with it.
 * MariaDB client (`mysql`, `mysqldump`)
 * Apache with `mod_rewrite` and `mod_headers`; `.htaccess` files are honoured, directory listing is off
 * Health check: Docker reports the container as `healthy` once Apache and PHP serve requests.
@@ -57,26 +64,50 @@ Use them only for internal projects that have not been migrated yet, and never e
 
 ## Usage
 
+Development, with Docker Compose:
+
 ```yaml
 services:
-  my_webapp:
+  app:
     image: maidea/webserver:dev-apache-php8.4
     volumes:
-      - "./src:/src"          # app code; document root is /src/app/webroot
+      - "./src:/src"
+    ports:
+      - "8080:80"
     environment:
       - XDEBUG_REMOTE_HOST=host.docker.internal
-      # with jwilder/nginx-proxy:
-      #- VIRTUAL_HOST=host.example.com
-      #- VIRTUAL_PORT=80
-    # with Traefik:
-    #labels:
-    #  - "traefik.http.routers.my_webapp.rule=Host(`host.example.com`)"
     # on Linux, host.docker.internal needs:
     #extra_hosts:
     #  - "host.docker.internal:host-gateway"
+```
+
+Production, behind a reverse proxy that terminates HTTPS:
+
+```yaml
+services:
+  app:
+    image: maidea/webserver:prod-apache-php8.4
+    restart: unless-stopped
+    volumes:
+      - "./src:/src"
+    environment:
+      - PHP_MEMORY_LIMIT=512M
+      # with jwilder/nginx-proxy:
+      #- VIRTUAL_HOST=app.example.com
+    # with Traefik:
+    #labels:
+    #  - "traefik.http.routers.app.rule=Host(`app.example.com`)"
     expose:
       - "80"
 ```
+
+Good to know:
+
+* **File permissions:** PHP runs as `www-data` (uid 33). Directories your app writes to (e.g. `app/tmp`) must be writable for that user.
+* **HTTPS:** the container serves plain HTTP on port 80; terminate HTTPS at a reverse proxy.
+  The prod images mark session cookies `secure`, so the app must be reached over HTTPS (or set `SESSION_COOKIE_SECURE=0`).
+* **Other frameworks:** e.g. for Laravel or Symfony set `APACHE_DOCUMENT_ROOT=/src/public` (prod; in dev the document root is fixed to `/src/app/webroot`).
+* **Logs:** Apache and PHP log to the container output (`docker logs`).
 
 ## Configuration
 
@@ -87,12 +118,28 @@ All variables are read at container start.
 | `PHP_MEMORY_LIMIT` | `1024M` | both | PHP `memory_limit` |
 | `SESSION_COOKIE_SECURE` | `1` | prod | set to `0` only if the app is served over plain HTTP |
 | `APACHE_DOCUMENT_ROOT` | `/src/app/webroot` | prod | in dev the document root is fixed to `/src/app/webroot` |
-| `XDEBUG_REMOTE_HOST` | – | dev | **required for step debugging**; `host.docker.internal` on Docker Desktop |
+| `XDEBUG_REMOTE_HOST` | – | dev | **required for step debugging**: where the IDE listens, e.g. `host.docker.internal` on Docker Desktop |
 | `XDEBUG_IDE_KEY` | `PHPSTORM` | dev | trigger value: send `XDEBUG_SESSION=PHPSTORM` (browser extension, cookie or query parameter) |
 | `XDEBUG_MODE` | `develop,debug` | dev | e.g. `debug,profile`, or `off` |
 | `XDEBUG_REMOTE_PORT` | `9003` | dev | |
 | `XDEBUG_OUTPUT_DIR` | `/tmp` | dev | profiler/trace output |
 | `XDEBUG_OUTPUT_PROFILE_NAME` | `cachegrind.out.%p` | dev | |
+
+## Legacy tags
+
+Legacy tags are frozen, receive no updates, and run PHP versions that are no longer supported by the PHP project and have known vulnerabilities.
+Use them only if you cannot upgrade yet, and never expose them to the internet.
+
+| PHP | Tags |
+|---|---|
+| 8.2.10 | `prod-apache-php8.2`, `dev-apache-php8.2` |
+| 7.4 | `prod-apache-php7.4`, `prod-apache-php7`, `dev-apache-php7.4`, `dev-apache-php7`, `dev-apache-php7-x3`, `dev-apache-php7-x3-pgsql` |
+| 7.0–7.3 | `dev_apache_php7`, `dev-apache-php7.0`, `dev-apache-php7.2`, `dev-apache-php7-wpdf0.12.5`, `prod-apache-php7.3` |
+| 5.6 | `dev-apache-php5.6`, `dev-apache-php5`, `dev`, `dev1.4-apache-php5.6`, `dev1.6-apache-php5.6`, `dev1.7-apache-php5.6` |
+| nginx + php-fpm (2017) | `1`, `2` |
+
+**The 8.2 and 7.4 tags (and very likely 5.6) are vulnerable to the critical CVE-2026-109618 / CVE-2026-109619**
+([PHP advisory](https://www.php.net/archive/2026.php#2026-10-21-5)). 8.2 users: move to `prod-apache-php8.3` / `dev-apache-php8.3`.
 
 ## Building
 
@@ -100,9 +147,9 @@ Each image is built from its own branch:
 
 | Branch | Tags |
 |---|---|
-| `prod-apache-php` (same commit: `prod-apache-php8`) | `latest`, `prod-apache-php`, `prod-apache-php8`, `prod-apache-php8.4` |
+| `prod-apache-php` | `latest`, `prod-apache-php`, `prod-apache-php8`, `prod-apache-php8.4` |
 | `prod-apache-php8.3` | `prod-apache-php8.3` |
-| `master` (same commit: `dev-apache-php`, `dev-apache-php8`) | `dev-apache-php`, `dev-apache-php8`, `dev-apache-php8.4` |
+| `master` | `dev-apache-php`, `dev-apache-php8`, `dev-apache-php8.4` |
 | `dev-apache-php8.3` | `dev-apache-php8.3` |
 
 ```sh
@@ -110,4 +157,12 @@ docker buildx build --platform linux/amd64 -t maidea/webserver:<tag> .
 ```
 
 The PHP version and the PECL extension versions are pinned in the `Dockerfile`.
-Do not unpin them: e.g. an unpinned `pecl install decimal` installs decimal 2.x, which breaks the API used by existing apps.
+Do not unpin them: e.g. an unpinned decimal installs 2.x, which breaks the API used by existing apps.
+
+## Support and license
+
+These images are maintained for MAIDEA's own projects and offered to the public as-is, on a best-effort basis:
+there is no support, no guaranteed response to issues, and no warranty.
+
+Copyright (c) 2026 MAIDEA. All rights reserved. The source is published for reference; see [LICENSE](LICENSE).
+Third-party software in the images (Debian, PHP, Apache, wkhtmltopdf, …) is covered by its own licenses.
