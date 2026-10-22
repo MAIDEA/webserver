@@ -46,7 +46,12 @@ The old per-version branches and tags are preserved as `archive/branch/*` and `a
 ## CI
 
 * `build.yml`: pull requests build and smoke-test the affected images; pushes to `master` also publish them.
-  Manual runs take image ids (or `all`) and an optional push. Frozen legacy images are republished only when their own files change.
+  Manual runs take image ids (or `all`) and an optional push. `scripts/changed-images.sh` decides what is affected:
+  * an image's own files, or its entry in `matrix.json`: that image
+  * `scripts/build.sh`, `build.yml`: every image in pull requests; when publishing, only the images that track upstream
+    (frozen legacy images are republished only when their own files change)
+  * `tests/`: every image in pull requests; when publishing, nothing is rebuilt and the published images are smoke-tested
+  * docs: nothing
 * `upstream-check.yml`: daily, rebuilds and publishes images whose official php base image has changed
   (compares the `org.opencontainers.image.base.digest` label set by `build.sh`).
 * Requires the repository secret `DOCKERHUB_TOKEN` (Docker Hub access token, read & write) and the variable `DOCKERHUB_USERNAME`.

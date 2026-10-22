@@ -42,6 +42,7 @@ jobs:
     outputs:
       images: ${{ steps.plan.outputs.images }}
       push: ${{ steps.plan.outputs.push }}
+      retest: ${{ steps.plan.outputs.retest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,6 +56,7 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
         run: |
           all=$(jq -c '[.images[].id]' matrix.json)
+          retest='[]'
           case "$EVENT" in
             workflow_call)
               images=$INPUT_IMAGES push=true ;;
@@ -67,6 +69,10 @@ jobs:
             push)
               if git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
                 images=$(scripts/changed-images.sh "$PUSH_BEFORE" --publish)
+                # Changed smoke tests: also run them against the published images that are not rebuilt
+                if git diff --name-only "$PUSH_BEFORE" HEAD | grep -q '^tests/'; then
+                  retest=$(jq -c --argjson built "$images" '[.images[].id | select(IN($built[]) | not)]' matrix.json)
+                fi
               else
                 images=$(jq -c '[.images[] | select(.track_upstream) | .id]' matrix.json)
               fi
@@ -74,9 +80,12 @@ jobs:
           esac
           # Reject ids that are not in matrix.json
           jq -e --argjson all "$all" 'all(.[]; IN($all[]))' <<< "$images" > /dev/null
-          echo "images=$images" >> "$GITHUB_OUTPUT"
-          echo "push=$push" >> "$GITHUB_OUTPUT"
-          echo "Images: \`$images\`, push: \`$push\`" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "images=$images"
+            echo "push=$push"
+            echo "retest=$retest"
+          } >> "$GITHUB_OUTPUT"
+          echo "Images: \`$images\`, push: \`$push\`, smoke-test published: \`$retest\`" >> "$GITHUB_STEP_SUMMARY"
 
   build:
     needs: plan
@@ -108,15 +117,36 @@ jobs:
           IMAGE: ${{ matrix.image }}
         run: scripts/build.sh --smoke --push "$IMAGE"
 
+  # Smoke-test published images (pushes that change tests/ without rebuilding the image)
+  retest:
+    needs: plan
+    if: needs.plan.outputs.retest != '[]'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.plan.outputs.retest) }}
+    name: smoke-test published ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          read -r tag kind php < <(jq -r --arg id "$IMAGE" '.images[] | select(.id == $id) | "\(.tags[0]) \(.smoke) \(.php)"' matrix.json)
+          docker pull --platform linux/amd64 "maidea/webserver:$tag"
+          tests/smoke.sh "maidea/webserver:$tag" "$kind" "$php"
+
   # Single, stable check name for branch protection (the build job names depend on the image list)
   result:
-    needs: [plan, build]
+    needs: [plan, build, retest]
     if: always()
     runs-on: ubuntu-24.04
     steps:
       - env:
           PLAN: ${{ needs.plan.result }}
           BUILD: ${{ needs.build.result }}
+          RETEST: ${{ needs.retest.result }}
         run: |
-          echo "plan: $PLAN, build: $BUILD"
-          [ "$PLAN" = success ] && { [ "$BUILD" = success ] || [ "$BUILD" = skipped ]; }
+          echo "plan: $PLAN, build: $BUILD, retest: $RETEST"
+          [ "$PLAN" = success ] && { [ "$BUILD" = success ] || [ "$BUILD" = skipped ]; } \
+            && { [ "$RETEST" = success ] || [ "$RETEST" = skipped ]; }
