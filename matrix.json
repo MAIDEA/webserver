@@ -1,0 +1,11 @@
+{
+  "images": [
+    {"id": "prod-8.4", "context": ".", "target": "prod", "php": "8.4", "args": {"PHP_VERSION": "8.4"}, "base": "php:8.4-apache-bookworm", "prebuild": null, "tags": ["prod-apache-php8.4", "prod-apache-php8", "prod-apache-php", "latest"], "immutable_prefix": "prod-apache-php", "track_upstream": true, "smoke": "prod"},
+    {"id": "prod-8.3", "context": ".", "target": "prod", "php": "8.3", "args": {"PHP_VERSION": "8.3"}, "base": "php:8.3-apache-bookworm", "prebuild": null, "tags": ["prod-apache-php8.3"], "immutable_prefix": "prod-apache-php", "track_upstream": true, "smoke": "prod"},
+    {"id": "dev-8.4", "context": ".", "target": "dev", "php": "8.4", "args": {"PHP_VERSION": "8.4"}, "base": "php:8.4-apache-bookworm", "prebuild": null, "tags": ["dev-apache-php8.4", "dev-apache-php8", "dev-apache-php"], "immutable_prefix": "dev-apache-php", "track_upstream": true, "smoke": "dev"},
+    {"id": "dev-8.3", "context": ".", "target": "dev", "php": "8.3", "args": {"PHP_VERSION": "8.3"}, "base": "php:8.3-apache-bookworm", "prebuild": null, "tags": ["dev-apache-php8.3"], "immutable_prefix": "dev-apache-php", "track_upstream": true, "smoke": "dev"},
+    {"id": "legacy-7.4-prod", "context": "legacy/php7.4-prod", "target": null, "php": "7.4", "args": {}, "base": null, "prebuild": {"context": "legacy/php7.4-base", "tag": "maidea-local/php:7.4.33-cve-patched-apache-bullseye"}, "tags": ["prod-apache-php7.4", "prod-apache-php7"], "immutable_prefix": null, "track_upstream": false, "smoke": "legacy"},
+    {"id": "legacy-7.4-dev", "context": "legacy/php7.4-dev", "target": null, "php": "7.4", "args": {}, "base": null, "prebuild": {"context": "legacy/php7.4-base", "tag": "maidea-local/php:7.4.33-cve-patched-apache-bullseye"}, "tags": ["dev-apache-php7.4", "dev-apache-php7"], "immutable_prefix": null, "track_upstream": false, "smoke": "legacy"},
+    {"id": "legacy-5.6-dev", "context": "legacy/php5.6-dev", "target": null, "php": "5.6", "args": {}, "base": null, "prebuild": {"context": "legacy/php5.6-base", "tag": "maidea-local/php:5.6.40-cve-patched-apache-stretch"}, "tags": ["dev-apache-php5.6", "dev-apache-php5"], "immutable_prefix": null, "track_upstream": false, "smoke": "legacy"}
+  ]
+}

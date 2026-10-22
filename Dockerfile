@@ -1,211 +1,92 @@
-# Build stage
-FROM php:8.4.27-apache-bookworm as builder
+# Apache + mod_php images for apps mounted at /src. Two targets: prod (default) and dev.
+# Build arguments per image are listed in matrix.json; build with scripts/build.sh.
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config \
-    curl \
-    git \
-    libxml2-dev \
-    libicu-dev \
-    libc-client-dev \
-    libkrb5-dev \
-    libpng-dev \
-    libfreetype6-dev \
-    libjpeg62-turbo-dev \
-    libzip-dev \
-    libwebp-dev \
-    libpq-dev \
-    make \
-    gcc \
-    libzip-dev \
+# PHP minor version of the official php image, e.g. 8.4 (patch releases are picked up on rebuild)
+ARG PHP_VERSION=8.4
+
+# libmpdec for the decimal extension: not packaged in Debian 12, built from a checksum-verified tarball
+FROM php:${PHP_VERSION}-apache-bookworm AS mpdecimal
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev make \
     && rm -rf /var/lib/apt/lists/*
-
-# Install mpdecimal from source
 RUN cd /tmp \
-    && curl -LO https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-2.5.1.tar.gz \
-    && echo "9f9cd4c041f99b5c49ffb7b59d9f12d95b683d88585608aa56a6307667b2b21f mpdecimal-2.5.1.tar.gz" | sha256sum --check --status - \
+    && curl -fsSLO https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-2.5.1.tar.gz \
+    && echo "9f9cd4c041f99b5c49ffb7b59d9f12d95b683d88585608aa56a6307667b2b21f  mpdecimal-2.5.1.tar.gz" | sha256sum --check --status - \
     && tar xf mpdecimal-2.5.1.tar.gz \
     && cd mpdecimal-2.5.1 \
-    && ./configure \
+    && ./configure --disable-cxx \
     && make \
-    && make install \
-    && cd .. \
-    && rm -rf mpdecimal-2.5.1*
+    && make install
 
-# Build and configure PHP extensions
-RUN pecl update-channels \
-    && pecl install apcu-5.1.24 xdebug-3.4.4 decimal-1.5.0 imap-1.0.3 \
-    && docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-configure opcache --enable-opcache \
-    && docker-php-ext-configure pgsql -with-pgsql=/usr/local/pgsql \
-    && docker-php-ext-install -j$(nproc) \
-        gd \
-        intl \
-        pdo_mysql \
-        pcntl \
-        zip \
-        bcmath \
-        shmop \
-        sockets \
-        soap \
-        opcache \
-        pdo \
-        pdo_pgsql \
-        pgsql
 
-# Final stage
-FROM php:8.4.27-apache-bookworm
+FROM php:${PHP_VERSION}-apache-bookworm AS base
 
-# Declare build stage args for use in ENV
-ARG XDEBUG_REMOTE_PORT=9003
-ARG XDEBUG_IDE_KEY=PHPSTORM
-ARG XDEBUG_MODE=develop,debug
-ARG XDEBUG_OUTPUT_DIR=/tmp
-ARG XDEBUG_OUTPUT_PROFILE_NAME=cachegrind.out.%p
-ARG APACHE_DOCUMENT_ROOT=/src/app/webroot
+LABEL org.opencontainers.image.source="https://github.com/MAIDEA/webserver"
 
-# Set environment variables with defaults applied correctly
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     PHP_MEMORY_LIMIT=1024M \
-    XDEBUG_REMOTE_PORT=${XDEBUG_REMOTE_PORT} \
-    XDEBUG_IDE_KEY=${XDEBUG_IDE_KEY} \
-    XDEBUG_MODE=${XDEBUG_MODE} \
-    XDEBUG_OUTPUT_DIR=${XDEBUG_OUTPUT_DIR} \
-    XDEBUG_OUTPUT_PROFILE_NAME=${XDEBUG_OUTPUT_PROFILE_NAME}
+    APACHE_DOCUMENT_ROOT=/src/app/webroot
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    libxml2 \
-    mariadb-client \
-    libicu72 \
-    libc-client2007e \
-    libkrb5-3 \
-    libpng16-16 \
-    libfontconfig1 \
-    zlib1g \
-    libfreetype6 \
-    libxrender1 \
-    libxext6 \
-    libx11-6 \
-    fontconfig \
-    xfonts-base \
-    xfonts-75dpi \
-    libwebp7 \
-    libpq5 \
-    libjpeg62-turbo \
-    libzip-dev \
-    unzip \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /tmp/* \
-    && rm -rf /var/tmp/*
+COPY --from=mlocati/php-extension-installer:2.12.3 /usr/bin/install-php-extensions /usr/local/bin/
+# COPY would turn the library symlinks into plain files, which the extension installer does not recognise
+COPY --from=mpdecimal /usr/local/lib/libmpdec.so.2.5.1 /usr/local/lib/
+COPY --from=mpdecimal /usr/local/include/mpdecimal.h /usr/local/include/
 
-# Copy built extensions and configurations from builder
-COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
-COPY --from=builder /usr/local/etc/php/conf.d/ /usr/local/etc/php/conf.d/
-COPY --from=builder /usr/local/lib/libmpdec* /usr/local/lib/
-COPY --from=builder /usr/local/include/mpdecimal* /usr/local/include/
+# PECL versions are pinned on purpose: unpinned builds pull new majors (e.g. decimal 2.x changed its API)
+ARG APCU_VERSION=5.1.24
+ARG DECIMAL_VERSION=1.5.0
+ARG IMAP_VERSION=1.0.3
+RUN ln -s libmpdec.so.2.5.1 /usr/local/lib/libmpdec.so.3 \
+    && ln -s libmpdec.so.2.5.1 /usr/local/lib/libmpdec.so \
+    && ldconfig \
+    && install-php-extensions \
+        apcu-${APCU_VERSION} \
+        bcmath \
+        decimal-${DECIMAL_VERSION} \
+        imap-${IMAP_VERSION} \
+        intl \
+        opcache \
+        pcntl \
+        pdo_mysql \
+        pdo_pgsql \
+        pgsql \
+        shmop \
+        soap \
+        sockets \
+        zip \
+    && ldd "$(php-config --extension-dir)/decimal.so" | grep -q 'libmpdec.so.3 => /usr/local/lib/libmpdec.so.3'
 
-# Enable PHP extensions
-RUN docker-php-ext-enable \
-    apcu \
-    decimal \
-    imap \
-    gd \
-    intl \
-    pdo_mysql \
-    pcntl \
-    zip \
-    bcmath \
-    shmop \
-    sockets \
-    soap \
-    opcache \
-    pdo \
-    pdo_pgsql \
-    pgsql \
-    xdebug
+# gd with FreeType, JPEG, PNG and WebP only: on Debian 12 install-php-extensions always adds AVIF and XPM,
+# whose extra image decoders the apps do not need
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libfreetype6 libjpeg62-turbo libpng16-16 libwebp7 \
+    && apt-get install -y --no-install-recommends libfreetype6-dev libjpeg62-turbo-dev libpng-dev libwebp-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install -j"$(nproc)" gd \
+    && apt-get purge -y --auto-remove libfreetype6-dev libjpeg62-turbo-dev libpng-dev libwebp-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Development PHP Configuration
-RUN { \
-    echo 'short_open_tag = On'; \
-    echo 'output_buffering = 4096'; \
-    echo 'max_execution_time = 180'; \
-    echo 'max_input_time = 120'; \
-    echo 'memory_limit = ${PHP_MEMORY_LIMIT}'; \
-    echo 'error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT'; \
-    echo 'display_errors = On'; \
-    echo 'display_startup_errors = On'; \
-    echo 'log_errors = On'; \
-    echo 'log_errors_max_len = 1024'; \
-    echo 'html_errors = On'; \
-    echo 'default_charset = "UTF-8"'; \
-    echo 'post_max_size = 128M'; \
-    echo 'upload_max_filesize = 128M'; \
-    echo 'max_file_uploads = 20'; \
-    echo 'date.timezone = UTC'; \
-    echo 'session.use_strict_mode = 0'; \
-    echo 'session.use_cookies = 1'; \
-    echo 'session.use_only_cookies = 1'; \
-    echo 'session.cookie_secure = 0'; \
-    echo 'session.use_trans_sid = 0'; \
-    echo 'session.cache_limiter = nocache'; \
-    echo 'session.gc_probability = 0'; \
-    echo 'opcache.enable=0'; \
-    echo 'error_log = /proc/self/fd/2'; \
-    echo 'assert.exception=1'; \
-    } > /usr/local/etc/php/conf.d/custom-php.ini
-
-# Configure APCu for development
-RUN { \
-    echo 'extension=apcu.so'; \
-    echo 'apc.enable_cli=1'; \
-    echo 'apc.shm_size=512M'; \
-    } > /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
-
-# Configure XDebug
-RUN { \
-    echo "xdebug.mode=\${XDEBUG_MODE}"; \
-    echo "xdebug.client_host=\${XDEBUG_REMOTE_HOST}"; \
-    echo "xdebug.start_with_request=trigger"; \
-    echo "xdebug.trigger_value=\${XDEBUG_IDE_KEY}"; \
-    echo "xdebug.output_dir=\${XDEBUG_OUTPUT_DIR}"; \
-    echo "xdebug.profiler_output_name=\${XDEBUG_OUTPUT_PROFILE_NAME}"; \
-    echo "xdebug.client_port=\${XDEBUG_REMOTE_PORT}"; \
-    echo "xdebug.max_nesting_level=500"; \
-    } > /usr/local/etc/php/conf.d/xdebug.ini
-
-# Install Composer
-RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-
-# Install wkhtmltopdf
+# wkhtmltopdf: last upstream release (project archived), checksum-verified; its dependencies come via apt
 RUN curl -fsSL -o /tmp/wkhtmltopdf.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_amd64.deb \
     && echo "98ba0d157b50d36f23bd0dedf4c0aa28c7b0c50fcdcdc54aa5b6bbba81a3941d  /tmp/wkhtmltopdf.deb" | sha256sum --check --status - \
-    && dpkg -i /tmp/wkhtmltopdf.deb \
-    && rm /tmp/wkhtmltopdf.deb
+    && apt-get update \
+    && apt-get install -y --no-install-recommends /tmp/wkhtmltopdf.deb mariadb-client unzip \
+    && rm -rf /var/lib/apt/lists/* /tmp/wkhtmltopdf.deb
 
-# Configure Apache
+# Document root comes from APACHE_DOCUMENT_ROOT at container start (single quotes keep it unexpanded here)
 RUN a2enmod rewrite headers \
- && sed -ri -e "s!/var/www/html!${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/sites-available/*.conf \
- && sed -ri -e "s!/var/www/!${APACHE_DOCUMENT_ROOT}!g" /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+    && sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
+    && sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
-# Health check: PHP probe on a loopback-only listener, independent of the app
+# Copied after the document-root rewrite above, which would otherwise rewrite its /var/www/ path
+COPY config/apache/healthcheck.conf /etc/apache2/conf-available/healthcheck.conf
 RUN mkdir -p /var/www/healthcheck \
     && echo '<?php echo "ok";' > /var/www/healthcheck/index.php \
-    && { \
-    echo 'Listen 127.0.0.1:8081'; \
-    echo '<VirtualHost 127.0.0.1:8081>'; \
-    echo '    DocumentRoot /var/www/healthcheck'; \
-    echo '    <Directory /var/www/healthcheck>'; \
-    echo '        Require local'; \
-    echo '    </Directory>'; \
-    echo '    CustomLog /dev/null common'; \
-    echo '</VirtualHost>'; \
-    } > /etc/apache2/conf-available/healthcheck.conf \
-    && a2enconf healthcheck
+    && a2enconf healthcheck \
+    && chown -R www-data:www-data /var/www \
+    && chmod -R 755 /var/www
+
+COPY config/php/common.ini /usr/local/etc/php/conf.d/zz-common.ini
 
 WORKDIR /src
 
@@ -215,3 +96,37 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsS --max-time 4 http://127.0.0.1:8081/ || exit 1
 
 CMD ["apache2-foreground"]
+
+
+FROM base AS dev
+
+ARG XDEBUG_VERSION=3.4.4
+RUN install-php-extensions xdebug-${XDEBUG_VERSION} \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+
+ENV XDEBUG_MODE=develop,debug \
+    XDEBUG_REMOTE_HOST=host.docker.internal \
+    XDEBUG_REMOTE_PORT=9003 \
+    XDEBUG_IDE_KEY=PHPSTORM \
+    XDEBUG_OUTPUT_DIR=/tmp \
+    XDEBUG_OUTPUT_PROFILE_NAME=cachegrind.out.%p
+
+COPY config/php/dev.ini /usr/local/etc/php/conf.d/zz-dev.ini
+COPY config/php/apcu-dev.ini /usr/local/etc/php/conf.d/zz-apcu.ini
+COPY config/php/xdebug.ini /usr/local/etc/php/conf.d/zz-xdebug.ini
+
+
+# Last stage = default target
+FROM base AS prod
+
+ENV SESSION_COOKIE_SECURE=1
+
+COPY config/php/prod.ini /usr/local/etc/php/conf.d/zz-prod.ini
+COPY config/php/opcache-prod.ini /usr/local/etc/php/conf.d/zz-opcache.ini
+COPY config/php/apcu-prod.ini /usr/local/etc/php/conf.d/zz-apcu.ini
+COPY config/apache/prod-hardening.conf /etc/apache2/conf-available/zz-prod-hardening.conf
+RUN a2enconf zz-prod-hardening

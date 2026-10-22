@@ -1,0 +1,5 @@
+RewriteEngine On
+RewriteRule ^rw-test$ index.php [L]
+<IfModule mod_headers.c>
+    Header set X-Smoke-Header yes
+</IfModule>
