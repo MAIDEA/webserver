@@ -1,0 +1,122 @@
+# Builds, smoke-tests and (outside pull requests) pushes the images listed in matrix.json.
+#   pull_request       builds the images affected by the change, no push
+#   push to master     builds and pushes the affected images
+#   workflow_dispatch  builds the given images, pushes if asked
+#   workflow_call      builds and pushes the given images (used by upstream-check.yml)
+name: build
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      images:
+        description: 'Image ids from matrix.json, comma-separated, or "all"'
+        required: true
+        default: all
+      push:
+        description: Push to Docker Hub
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      images:
+        description: JSON array of image ids from matrix.json
+        type: string
+        required: true
+    secrets:
+      DOCKERHUB_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      images: ${{ steps.plan.outputs.images }}
+      push: ${{ steps.plan.outputs.push }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_IMAGES: ${{ inputs.images }}
+          INPUT_PUSH: ${{ inputs.push }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          all=$(jq -c '[.images[].id]' matrix.json)
+          case "$EVENT" in
+            workflow_call)
+              images=$INPUT_IMAGES push=true ;;
+            workflow_dispatch)
+              if [ "$INPUT_IMAGES" = all ]; then images=$all
+              else images=$(jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; ""))' <<< "$INPUT_IMAGES"); fi
+              push=$INPUT_PUSH ;;
+            pull_request)
+              images=$(scripts/changed-images.sh "$PR_BASE") push=false ;;
+            push)
+              if git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+                images=$(scripts/changed-images.sh "$PUSH_BEFORE" --publish)
+              else
+                images=$(jq -c '[.images[] | select(.track_upstream) | .id]' matrix.json)
+              fi
+              push=true ;;
+          esac
+          # Reject ids that are not in matrix.json
+          jq -e --argjson all "$all" 'all(.[]; IN($all[]))' <<< "$images" > /dev/null
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+          echo "push=$push" >> "$GITHUB_OUTPUT"
+          echo "Images: \`$images\`, push: \`$push\`" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.images != '[]'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.plan.outputs.images) }}
+    name: build ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The runner's default buildx builder uses the docker driver, which can build FROM the locally
+      # built maidea-local/* bases (see "prebuild" in matrix.json). Do not add docker/setup-buildx-action.
+      - name: Log in to Docker Hub
+        if: needs.plan.outputs.push == 'true'
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      - name: Build and smoke-test
+        if: needs.plan.outputs.push != 'true'
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: scripts/build.sh --smoke "$IMAGE"
+      - name: Build, smoke-test and push
+        if: needs.plan.outputs.push == 'true'
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: scripts/build.sh --smoke --push "$IMAGE"
+
+  # Single, stable check name for branch protection (the build job names depend on the image list)
+  result:
+    needs: [plan, build]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          PLAN: ${{ needs.plan.result }}
+          BUILD: ${{ needs.build.result }}
+        run: |
+          echo "plan: $PLAN, build: $BUILD"
+          [ "$PLAN" = success ] && { [ "$BUILD" = success ] || [ "$BUILD" = skipped ]; }
