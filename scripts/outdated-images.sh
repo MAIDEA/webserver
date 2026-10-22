@@ -11,7 +11,7 @@ outdated=()
 while IFS=$'\t' read -r id tag base; do
     current=$(docker buildx imagetools inspect "$base" --format '{{json .Manifest.Digest}}' | tr -d '"')
     built=$(docker buildx imagetools inspect "$REPO:$tag" --format '{{json .Image}}' 2>/dev/null \
-        | jq -r '."linux/amd64".config.Labels["org.opencontainers.image.base.digest"] // empty' || true)
+        | jq -r '(if has("config") then . else ."linux/amd64" end).config.Labels["org.opencontainers.image.base.digest"] // empty' || true)
     if [ "$built" != "$current" ]; then
         echo "$id: base $base changed (built from ${built:-unknown}, now $current)" >&2
         outdated+=("$id")
