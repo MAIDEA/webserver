@@ -1,0 +1,43 @@
+# Daily: rebuild and push images whose official php base image has changed
+# (new PHP patch release or Debian security updates). See scripts/outdated-images.sh.
+name: upstream-check
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-check
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write # keepalive below
+    outputs:
+      images: ${{ steps.check.outputs.images }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: check
+        run: echo "images=$(scripts/outdated-images.sh)" >> "$GITHUB_OUTPUT"
+      # GitHub disables scheduled workflows after 60 days without repository activity;
+      # re-enabling through the API keeps this schedule running without dummy commits.
+      - name: Keep the schedule enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/upstream-check.yml/enable"
+
+  rebuild:
+    needs: check
+    if: needs.check.outputs.images != '[]'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build.yml
+    with:
+      images: ${{ needs.check.outputs.images }}
+    secrets: inherit
