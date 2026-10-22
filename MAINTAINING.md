@@ -25,6 +25,7 @@ scripts/build.sh --smoke                    # all images
 
 Images are built for `linux/amd64`, also on Apple Silicon (through emulation, slower).
 `build.sh` always pulls fresh base images and fails if the built PHP version differs from the current upstream image.
+Immutable tags are never overwritten: when the name already exists on Docker Hub, `build.sh` adds `.2`, `.3`, ….
 
 ## Versions
 

@@ -30,8 +30,8 @@ Which tag to use:
 * **`prod-apache-php8.4`, `dev-apache-php8.3`, …** stay on that PHP version and only receive patch releases. Recommended.
 * **`latest`, `prod-apache-php`, `prod-apache-php8`, `dev-apache-php`, `dev-apache-php8`** move to the newest PHP version when one is added
   (e.g. 8.5), which can break your app.
-* **Immutable tags** `<tag>-<php version>-<build date>` (e.g. `prod-apache-php8.4.27-20261022`) are never overwritten:
-  pin one for reproducible deploys or to roll back.
+* **Immutable tags** `<tag>-<php version>-<build date>` (e.g. `prod-apache-php8.4.27-20261022`, `.2` etc. for further builds that day)
+  are never overwritten: pin one for reproducible deploys or to roll back.
 
 The images are rebuilt automatically when the official PHP image changes (PHP patch releases, Debian security updates), usually within a day.
 Older PHP versions are listed under [Legacy tags](#legacy-tags).
