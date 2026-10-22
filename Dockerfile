@@ -1,5 +1,5 @@
 # Build stage
-FROM --platform=${BUILDPLATFORM} php:8.3-apache-bookworm as builder
+FROM php:8.3.36-apache-bookworm as builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -34,7 +34,7 @@ RUN cd /tmp \
 
 # Build and configure PHP extensions
 RUN pecl update-channels \
-    && pecl install apcu decimal imap \
+    && pecl install apcu-5.1.24 decimal-1.5.0 imap-1.0.3 \
     && docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-configure opcache --enable-opcache \
     && docker-php-ext-configure pgsql -with-pgsql=/usr/local/pgsql \
@@ -54,7 +54,7 @@ RUN pecl update-channels \
         pgsql
 
 # Final stage
-FROM --platform=${BUILDPLATFORM} php:8.3-apache-bookworm
+FROM php:8.3.36-apache-bookworm
 
 # Environment variables
 ENV LANG=C.UTF-8 \
@@ -143,6 +143,8 @@ RUN { \
     echo 'session.cookie_httponly = 1'; \
     echo 'session.use_trans_sid = 0'; \
     echo 'session.cache_limiter = nocache'; \
+    echo 'expose_php = Off'; \
+    echo 'register_argc_argv = Off'; \
     } > /usr/local/etc/php/conf.d/custom-php.ini
 
 # Configure OpCache for production
@@ -169,7 +171,8 @@ RUN { \
     } > /usr/local/etc/php/conf.d/docker-php-ext-apcu.ini
 
 # Install wkhtmltopdf
-RUN curl -S -s -L -o /tmp/wkhtmltopdf.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_amd64.deb \
+RUN curl -fsSL -o /tmp/wkhtmltopdf.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bookworm_amd64.deb \
+    && echo "98ba0d157b50d36f23bd0dedf4c0aa28c7b0c50fcdcdc54aa5b6bbba81a3941d  /tmp/wkhtmltopdf.deb" | sha256sum --check --status - \
     && dpkg -i /tmp/wkhtmltopdf.deb \
     && rm /tmp/wkhtmltopdf.deb
 
@@ -177,6 +180,20 @@ RUN curl -S -s -L -o /tmp/wkhtmltopdf.deb https://github.com/wkhtmltopdf/packagi
 RUN a2enmod rewrite headers
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
 RUN sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+# Health check: PHP probe on a loopback-only listener, independent of the app
+RUN mkdir -p /var/www/healthcheck \
+    && echo '<?php echo "ok";' > /var/www/healthcheck/index.php \
+    && { \
+    echo 'Listen 127.0.0.1:8081'; \
+    echo '<VirtualHost 127.0.0.1:8081>'; \
+    echo '    DocumentRoot /var/www/healthcheck'; \
+    echo '    <Directory /var/www/healthcheck>'; \
+    echo '        Require local'; \
+    echo '    </Directory>'; \
+    echo '    CustomLog /dev/null common'; \
+    echo '</VirtualHost>'; \
+    } > /etc/apache2/conf-available/healthcheck.conf \
+    && a2enconf healthcheck
 
 # Apache security configuration
 RUN { \
@@ -191,8 +208,8 @@ RUN chown -R www-data:www-data /var/www \
 
 WORKDIR /src
 
-HEALTHCHECK --interval=30s --timeout=3s \
-    CMD curl -f http://localhost || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -fsS --max-time 4 http://127.0.0.1:8081/ || exit 1
 
 EXPOSE 80
 
