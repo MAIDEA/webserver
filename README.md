@@ -140,6 +140,10 @@ They contain the fix for CVE-2026-109618 / CVE-2026-109619 ([PHP advisory](https
 7.4 with the PHP security team's [backport](https://github.com/php/php-src/commit/712e60f9edfd),
 5.6 with Ondřej Surý's backport of the same fix. Many other known 5.6 vulnerabilities remain unfixed.
 
+With this fix, a request that exceeds the PHP memory limit ends immediately: the client gets an empty response,
+error handlers and shutdown functions do not run, and the error appears only in the container log.
+Apps that lower `memory_limit` at runtime (e.g. in an error handler) can hit this on every such request.
+
 The 5.6 prod image (added October 2026) is the dev image without Xdebug, with errors logged but not displayed and version headers hidden.
 
 **Changed with the October 2026 rebuild** (mitigations recommended by the advisory):

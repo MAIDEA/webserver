@@ -36,8 +36,10 @@ Immutable tags are never overwritten: when the name already exists on Docker Hub
 
 ## Changes
 
-`master` is the only branch. A ruleset protects it: changes go through pull requests, the `result` check must pass,
-force pushes and deletion are blocked. Repository admins can bypass the ruleset, for emergencies only.
+`master` is the only branch. Maintainers (repository admins) push to it directly; a push publishes the changed images
+after they pass the smoke tests (see [CI](#ci)). Pull requests are optional, e.g. to test a change in CI without publishing.
+A ruleset requires pull requests and the `result` check for everyone else, and blocks force pushes and deletion;
+admins bypass it.
 
 The old per-version branches and tags are preserved as `archive/branch/*` and `archive/tag/*` tags.
 
