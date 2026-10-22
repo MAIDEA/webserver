@@ -33,7 +33,7 @@ Which tag to use:
 * **Immutable tags** `<tag>-<php version>-<build date>` (e.g. `prod-apache-php8.4.27-20261022`) are never overwritten:
   pin one for reproducible deploys or to roll back.
 
-The images are updated with PHP patch releases.
+The images are rebuilt automatically when the official PHP image changes (PHP patch releases, Debian security updates), usually within a day.
 Older PHP versions are listed under [Legacy tags](#legacy-tags).
 
 ## Variants
@@ -74,9 +74,7 @@ services:
       - "./src:/src"
     ports:
       - "8080:80"
-    environment:
-      - XDEBUG_REMOTE_HOST=host.docker.internal
-    # on Linux, host.docker.internal needs:
+    # on Linux, Xdebug's default host.docker.internal needs:
     #extra_hosts:
     #  - "host.docker.internal:host-gateway"
 ```
@@ -106,7 +104,7 @@ Good to know:
 * **File permissions:** PHP runs as `www-data` (uid 33). Directories your app writes to (e.g. `app/tmp`) must be writable for that user.
 * **HTTPS:** the container serves plain HTTP on port 80; terminate HTTPS at a reverse proxy.
   The prod images mark session cookies `secure`, so the app must be reached over HTTPS (or set `SESSION_COOKIE_SECURE=0`).
-* **Other frameworks:** e.g. for Laravel or Symfony set `APACHE_DOCUMENT_ROOT=/src/public` (prod; in dev the document root is fixed to `/src/app/webroot`).
+* **Other frameworks:** e.g. for Laravel or Symfony set `APACHE_DOCUMENT_ROOT=/src/public`.
 * **Logs:** Apache and PHP log to the container output (`docker logs`).
 
 ## Configuration
@@ -117,8 +115,8 @@ All variables are read at container start.
 |---|---|---|---|
 | `PHP_MEMORY_LIMIT` | `1024M` | both | PHP `memory_limit` |
 | `SESSION_COOKIE_SECURE` | `1` | prod | set to `0` only if the app is served over plain HTTP |
-| `APACHE_DOCUMENT_ROOT` | `/src/app/webroot` | prod | in dev the document root is fixed to `/src/app/webroot` |
-| `XDEBUG_REMOTE_HOST` | – | dev | **required for step debugging**: where the IDE listens, e.g. `host.docker.internal` on Docker Desktop |
+| `APACHE_DOCUMENT_ROOT` | `/src/app/webroot` | both | |
+| `XDEBUG_REMOTE_HOST` | `host.docker.internal` | dev | where the IDE listens; works on Docker Desktop, on Linux see `extra_hosts` above |
 | `XDEBUG_IDE_KEY` | `PHPSTORM` | dev | trigger value: send `XDEBUG_SESSION=PHPSTORM` (browser extension, cookie or query parameter) |
 | `XDEBUG_MODE` | `develop,debug` | dev | e.g. `debug,profile`, or `off` |
 | `XDEBUG_REMOTE_PORT` | `9003` | dev | |
@@ -127,37 +125,44 @@ All variables are read at container start.
 
 ## Legacy tags
 
-Legacy tags are frozen, receive no updates, and run PHP versions that are no longer supported by the PHP project and have known vulnerabilities.
+Legacy tags run PHP versions that are no longer supported by the PHP project and have known vulnerabilities.
 Use them only if you cannot upgrade yet, and never expose them to the internet.
+
+### Security fixes only: PHP 7.4 and 5.6
+
+| PHP | Tags |
+|---|---|
+| 7.4.33 | `prod-apache-php7.4`, `prod-apache-php7`, `dev-apache-php7.4`, `dev-apache-php7` |
+| 5.6.40 | `dev-apache-php5.6`, `dev-apache-php5` |
+
+These receive only backported fixes for critical vulnerabilities, no other updates.
+They contain the fix for CVE-2026-109618 / CVE-2026-109619 ([PHP advisory](https://www.php.net/archive/2026.php#2026-10-21-5)):
+7.4 with the PHP security team's [backport](https://github.com/php/php-src/commit/712e60f9edfd),
+5.6 with Ondřej Surý's backport of the same fix. Many other known 5.6 vulnerabilities remain unfixed.
+
+**Changed with the October 2026 rebuild** (mitigations recommended by the advisory):
+
+* file uploads are limited to **100M** (`post_max_size` 110M; Apache rejects larger request bodies)
+* Apache serves one request per process (`KeepAlive Off`, `MaxConnectionsPerChild 1`): safer, but slower under load
+* session upload progress is disabled, and `max_input_nesting_level` is 16
+* opt-in `PHP_MEMORY_LIMIT=-1` removes the PHP memory limit and prevents the app from setting one, which blocks the out-of-memory path of CVE-2026-109618.
+  **Only use it together with a container memory limit** (e.g. `mem_limit` in Compose), otherwise one runaway request can use all memory of the server.
+
+### Frozen: no updates
 
 | PHP | Tags |
 |---|---|
 | 8.2.10 | `prod-apache-php8.2`, `dev-apache-php8.2` |
-| 7.4 | `prod-apache-php7.4`, `prod-apache-php7`, `dev-apache-php7.4`, `dev-apache-php7`, `dev-apache-php7-x3`, `dev-apache-php7-x3-pgsql` |
+| 7.4 | `dev-apache-php7-x3`, `dev-apache-php7-x3-pgsql` |
 | 7.0–7.3 | `dev_apache_php7`, `dev-apache-php7.0`, `dev-apache-php7.2`, `dev-apache-php7-wpdf0.12.5`, `prod-apache-php7.3` |
-| 5.6 | `dev-apache-php5.6`, `dev-apache-php5`, `dev`, `dev1.4-apache-php5.6`, `dev1.6-apache-php5.6`, `dev1.7-apache-php5.6` |
+| 5.6 | `dev`, `dev1.4-apache-php5.6`, `dev1.6-apache-php5.6`, `dev1.7-apache-php5.6` |
 | nginx + php-fpm (2017) | `1`, `2` |
 
-**The 8.2 and 7.4 tags (and very likely 5.6) are vulnerable to the critical CVE-2026-109618 / CVE-2026-109619**
-([PHP advisory](https://www.php.net/archive/2026.php#2026-10-21-5)). 8.2 users: move to `prod-apache-php8.3` / `dev-apache-php8.3`.
+**The 8.2 tags are vulnerable to the critical CVE-2026-109618 / CVE-2026-109619**: move to `prod-apache-php8.3` / `dev-apache-php8.3`.
 
 ## Building
 
-Each image is built from its own branch:
-
-| Branch | Tags |
-|---|---|
-| `prod-apache-php` | `latest`, `prod-apache-php`, `prod-apache-php8`, `prod-apache-php8.4` |
-| `prod-apache-php8.3` | `prod-apache-php8.3` |
-| `master` | `dev-apache-php`, `dev-apache-php8`, `dev-apache-php8.4` |
-| `dev-apache-php8.3` | `dev-apache-php8.3` |
-
-```sh
-docker buildx build --platform linux/amd64 -t maidea/webserver:<tag> .
-```
-
-The PHP version and the PECL extension versions are pinned in the `Dockerfile`.
-Do not unpin them: e.g. an unpinned decimal installs 2.x, which breaks the API used by existing apps.
+See [MAINTAINING.md](MAINTAINING.md).
 
 ## Support and license
 
