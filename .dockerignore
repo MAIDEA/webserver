@@ -1,4 +1,3 @@
-# The Dockerfile does not COPY anything from the build context, so send nothing.
-# This keeps .git, IDE files and any local .env out of the build.
-# When a COPY is added, allowlist its source here, e.g.:  !config/
+# Allowlist: send only what the Dockerfile COPYs (keeps .git, IDE files and any local .env out of the build)
 *
+!config/
