@@ -133,12 +133,14 @@ Use them only if you cannot upgrade yet, and never expose them to the internet.
 | PHP | Tags |
 |---|---|
 | 7.4.33 | `prod-apache-php7.4`, `prod-apache-php7`, `dev-apache-php7.4`, `dev-apache-php7` |
-| 5.6.40 | `dev-apache-php5.6`, `dev-apache-php5` |
+| 5.6.40 | `prod-apache-php5.6`, `prod-apache-php5`, `dev-apache-php5.6`, `dev-apache-php5` |
 
 These receive only backported fixes for critical vulnerabilities, no other updates.
 They contain the fix for CVE-2026-109618 / CVE-2026-109619 ([PHP advisory](https://www.php.net/archive/2026.php#2026-10-21-5)):
 7.4 with the PHP security team's [backport](https://github.com/php/php-src/commit/712e60f9edfd),
 5.6 with Ondřej Surý's backport of the same fix. Many other known 5.6 vulnerabilities remain unfixed.
+
+The 5.6 prod image (added October 2026) is the dev image without Xdebug, with errors logged but not displayed and version headers hidden.
 
 **Changed with the October 2026 rebuild** (mitigations recommended by the advisory):
 
