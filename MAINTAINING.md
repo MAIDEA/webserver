@@ -34,6 +34,13 @@ Immutable tags are never overwritten: when the name already exists on Docker Hub
   Do not unpin them: e.g. an unpinned decimal installs 2.x, which breaks the API used by existing apps.
 * Downloads outside apt and PECL are checksum-verified (mpdecimal, wkhtmltopdf); keep it that way when bumping versions.
 
+## Changes
+
+`master` is the only branch. A ruleset protects it: changes go through pull requests, the `result` check must pass,
+force pushes and deletion are blocked. Repository admins can bypass the ruleset, for emergencies only.
+
+The old per-version branches and tags are preserved as `archive/branch/*` and `archive/tag/*` tags.
+
 ## CI
 
 * `build.yml`: pull requests build and smoke-test the affected images; pushes to `master` also publish them.
