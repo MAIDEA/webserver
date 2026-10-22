@@ -66,7 +66,11 @@ for id in "${IDS[@]}"; do
         [ "$php_version" = "$upstream" ] || { echo "$id: built PHP $php_version, but $(field .base) is PHP $upstream" >&2; exit 1; }
     fi
     if [ "$(field .immutable_prefix)" != null ]; then
-        immutable="$REPO:$(field .immutable_prefix)$php_version-$DATE"
+        # Immutable tags are never overwritten: if the name already exists (e.g. a second build that day), add .2, .3, ...
+        immutable="$REPO:$(field .immutable_prefix)$php_version-$DATE" n=1
+        while docker buildx imagetools inspect "$immutable" > /dev/null 2>&1; do
+            n=$((n + 1)); immutable="$REPO:$(field .immutable_prefix)$php_version-$DATE.$n"
+        done
         docker tag "${tags[0]}" "$immutable"
         tags+=("$immutable")
     fi
