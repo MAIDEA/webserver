@@ -1,92 +1,113 @@
 # Maidea web server
-Nginx/Apache, php-fpm and wkhtml container for simple docker dev/test environments
-* intended for use with CakePhp, but works with any compatible php configuration
-* dev branch has xdebug
 
-#### Dev images:
+Apache + PHP (mod_php) Docker images for running a PHP app mounted as a volume: mount the app, start the container, done.
+Built for the CakePHP layout (document root `/src/app/webroot`), but works with any PHP app.
 
-* Based on the official **[php+apache](https://hub.docker.com/r/library/php/)** images
-* **Apache** root is set to */src/app/webroot*
-* **XDebug** (2.5.5) is enabled and configured to connect to remote client
-    * To make XDebug connect to the dev machine, set the **XDEBUG_REMOTE_HOST** environment variable to your dev IP address (xdebug.remote_host config)
-    * You can set the xdebug.idekey via the **XDEBUG_IDE_KEY** environment variable (e.g. XDEBUG_IDE_KEY=PHPSTORM)
-* **wkhtmltopdf** (0.12.4) binary added to /usr/local/bin
+* Docker Hub: [`maidea/webserver`](https://hub.docker.com/r/maidea/webserver)
+* Based on the official [`php:<version>-apache-bookworm`](https://hub.docker.com/_/php) images (Debian 12), `linux/amd64`
 
-Tags:
+## Tags
 
-* **dev** - the default dev image
-    * php5.6
-* Specific image tags:
-    * **dev-apache-php5.6**
-    * **dev-apache-php7.2**
+| Tags | PHP | Variant |
+|---|---|---|
+| `latest`, `prod-apache-php`, `prod-apache-php8`, `prod-apache-php8.4` | 8.4 | prod |
+| `prod-apache-php8.3` | 8.3 | prod |
+| `dev-apache-php`, `dev-apache-php8`, `dev-apache-php8.4` | 8.4 | dev |
+| `dev-apache-php8.3` | 8.3 | dev |
 
-The recommended development configuration is using **[Docker Compose](https://docs.docker.com/compose/)**:
+These tags are updated with PHP patch releases.
+Each build is also pushed under an immutable tag, `<tag>-<php version>-<build date>`
+(e.g. `prod-apache-php8.4.27-20261022`), which is never overwritten: pin it for reproducible deploys or to roll back.
+
+**Legacy tags** are frozen, receive no updates, and run end-of-life PHP versions with known vulnerabilities.
+Use them only for internal projects that have not been migrated yet, and never expose them to the internet:
+
+| PHP | Tags |
+|---|---|
+| 8.2.10 | `dev-apache-php8.2`, `prod-apache-php8.2` |
+| 7.4 | `dev-apache-php7`, `dev-apache-php7.4`, `prod-apache-php7`, `prod-apache-php7.4`, `dev-apache-php7-x3`, `dev-apache-php7-x3-pgsql` |
+| 7.0–7.3 | `dev_apache_php7`, `dev-apache-php7.0`, `dev-apache-php7.2`, `dev-apache-php7-wpdf0.12.5`, `prod-apache-php7.3` |
+| 5.6 | `dev-apache-php5`, `dev-apache-php5.6`, `dev`, `dev1.4-apache-php5.6`, `dev1.6-apache-php5.6`, `dev1.7-apache-php5.6` |
+| nginx + php-fpm (2017) | `1`, `2` |
+
+## Variants
+
+| | prod | dev |
+|---|---|---|
+| Errors | logged to stderr (`docker logs`), not displayed | displayed and logged |
+| OPcache | on, JIT on, **no file timestamp checks** (see below) | off |
+| Xdebug | – | 3.x, trigger mode |
+| Composer, git | – | yes |
+| Upload / post size | 256M | 128M |
+| `max_execution_time` | 60 s | 180 s |
+| Session cookie | `secure` (configurable), `httponly`, strict mode | not `secure` |
+| Version headers | hidden (`Server: Apache`, no `X-Powered-By`) | shown |
+
+**prod: restart after code changes.** OPcache does not check file timestamps, so code changed on the mounted volume is only picked up after a container restart.
+
+## Included
+
+* PHP extensions: apcu, bcmath, decimal, gd (freetype, jpeg, webp), imap, intl, opcache, pcntl, pdo_mysql, pdo_pgsql, pgsql, shmop, soap, sockets, zip,
+  plus the extensions built into the official image (curl, mbstring, …); xdebug in dev
+* wkhtmltopdf 0.12.6.1 (patched qt) at `/usr/local/bin/wkhtmltopdf`
+* MariaDB client (`mysql`, `mysqldump`)
+* Apache with `mod_rewrite` and `mod_headers`; `.htaccess` files are honoured, directory listing is off
+* Health check: Docker reports the container as `healthy` once Apache and PHP serve requests.
+  It uses an internal listener on `127.0.0.1:8081` that is not reachable from outside the container and does not touch your app.
+
+## Usage
+
 ```yaml
-version: '3'
-
 services:
   my_webapp:
-  
-    image: maidea/webserver:dev
-    
+    image: maidea/webserver:dev-apache-php8.4
     volumes:
-      # docker volume for app source
-      - "./src:/src"
-      
+      - "./src:/src"          # app code; document root is /src/app/webroot
     environment:
-      # uncomment and modify the next two lines if using jwilder/nginx-proxy
-      #- VIRTUAL_PORT=80
+      - XDEBUG_REMOTE_HOST=host.docker.internal
+      # with jwilder/nginx-proxy:
       #- VIRTUAL_HOST=host.example.com
-      
-    # uncomment and modify the next two lines if using traefik
+      #- VIRTUAL_PORT=80
+    # with Traefik:
     #labels:
-      #- "traefik.frontend.rule=Host:host.example.com"
-      
+    #  - "traefik.http.routers.my_webapp.rule=Host(`host.example.com`)"
+    # on Linux, host.docker.internal needs:
+    #extra_hosts:
+    #  - "host.docker.internal:host-gateway"
     expose:
       - "80"
-    
-    # example connection to development microservices:
-    external_links:
-      - mailhog
-      
-    # use whichever network config you require, e.g.:
-    network_mode: "bridge"
-  ```
+```
 
----
+## Configuration
 
-##### [DEPRECATED] Version 1:
-nginx root is set to */src/app/webroot*
+All variables are read at container start.
 
-using compose:
-```yaml
-webserver:
-  image: maidea/webserver:1
-  volumes:
-   - "./src:/src"
-  environment:
-    #for use witn jwilder/nginx-proxy
-   - VIRTUAL_HOST=host.example.com
-  expose:
-   - "80"
-  container_name: webserver1
-  ```
+| Variable | Default | Variant | Notes |
+|---|---|---|---|
+| `PHP_MEMORY_LIMIT` | `1024M` | both | PHP `memory_limit` |
+| `SESSION_COOKIE_SECURE` | `1` | prod | set to `0` only if the app is served over plain HTTP |
+| `APACHE_DOCUMENT_ROOT` | `/src/app/webroot` | prod | in dev the document root is fixed to `/src/app/webroot` |
+| `XDEBUG_REMOTE_HOST` | – | dev | **required for step debugging**; `host.docker.internal` on Docker Desktop |
+| `XDEBUG_IDE_KEY` | `PHPSTORM` | dev | trigger value: send `XDEBUG_SESSION=PHPSTORM` (browser extension, cookie or query parameter) |
+| `XDEBUG_MODE` | `develop,debug` | dev | e.g. `debug,profile`, or `off` |
+| `XDEBUG_REMOTE_PORT` | `9003` | dev | |
+| `XDEBUG_OUTPUT_DIR` | `/tmp` | dev | profiler/trace output |
+| `XDEBUG_OUTPUT_PROFILE_NAME` | `cachegrind.out.%p` | dev | |
 
+## Building
 
-##### [DEPRECATED] Version 2:
+Each image is built from its own branch:
 
-nginx root is set to */app/webroot*
+| Branch | Tags |
+|---|---|
+| `prod-apache-php` (same commit: `prod-apache-php8`) | `latest`, `prod-apache-php`, `prod-apache-php8`, `prod-apache-php8.4` |
+| `prod-apache-php8.3` | `prod-apache-php8.3` |
+| `master` (same commit: `dev-apache-php`, `dev-apache-php8`) | `dev-apache-php`, `dev-apache-php8`, `dev-apache-php8.4` |
+| `dev-apache-php8.3` | `dev-apache-php8.3` |
 
-using compose:
-```yaml
-webserver:
-  image: maidea/webserver:2
-  volumes:
-   - "./src/app:/app"
-  environment:
-    #for use witn jwilder/nginx-proxy
-   - VIRTUAL_HOST=host.example.com
-  expose:
-   - "80"
-  container_name: webserver1
-  ```
+```sh
+docker buildx build --platform linux/amd64 -t maidea/webserver:<tag> .
+```
+
+The PHP version and the PECL extension versions are pinned in the `Dockerfile`.
+Do not unpin them: e.g. an unpinned `pecl install decimal` installs decimal 2.x, which breaks the API used by existing apps.
