@@ -3,6 +3,7 @@
 #  - WWW_DATA_UID / WWW_DATA_GID: run Apache's www-data user with these IDs (e.g. your user's on a Linux host)
 #  - PHP_INI_<NAME>=<value>: PHP settings, e.g. PHP_INI_UPLOAD_MAX_FILESIZE=64M, PHP_INI_DATE__TIMEZONE=Europe/Zagreb
 #    (name lowercased, "__" becomes "."), written to $PHP_INI_DIR/conf.d/zzz-env.ini, which overrides the image's settings
+#  - APACHE_LIMIT_REQUEST_BODY: from the effective post_max_size, unless set
 #  - /docker-entrypoint.d/*.sh: run in name order before Apache starts (executable files are run, others sourced)
 set -e
 
@@ -25,6 +26,18 @@ if [ -w "$PHP_INI_DIR/conf.d" ]; then
     done > "$ini"
 elif [ -n "$settings" ]; then
     echo "$0: cannot write $ini (not running as root), ignoring PHP_INI_* variables" >&2
+fi
+
+# Apache's request body limit follows post_max_size + 10% (0: no limit), unless APACHE_LIMIT_REQUEST_BODY is set
+if [ -z "${APACHE_LIMIT_REQUEST_BODY:-}" ]; then
+    # shellcheck disable=SC2016
+    if APACHE_LIMIT_REQUEST_BODY=$(php -r '$v = trim(ini_get("post_max_size")); $n = (float) $v;
+            switch (strtoupper(substr($v, -1))) { case "G": $n *= 1024; case "M": $n *= 1024; case "K": $n *= 1024; }
+            echo $n > 0 ? (int) ($n * 1.1) : 0;'); then
+        export APACHE_LIMIT_REQUEST_BODY
+    else
+        unset APACHE_LIMIT_REQUEST_BODY
+    fi
 fi
 
 case "$1" in

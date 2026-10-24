@@ -98,23 +98,29 @@ jobs:
     name: build ${{ matrix.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The runner's default buildx builder uses the docker driver, which can build FROM the locally
-      # built maidea-local/* bases (see "prebuild" in matrix.json). Do not add docker/setup-buildx-action.
+      # docker-container builder and cache access, so build.sh can reuse layers from the GitHub Actions cache
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+      # Also for builds without push: pulls then count against our account, not the runner's shared IP
       - name: Log in to Docker Hub
-        if: needs.plan.outputs.push == 'true'
         env:
           DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+        run: |
+          if [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          fi
       - name: Build and smoke-test
         if: needs.plan.outputs.push != 'true'
         env:
           IMAGE: ${{ matrix.image }}
+          BUILD_CACHE: gha
         run: scripts/build.sh --smoke "$IMAGE"
       - name: Build, smoke-test and push
         if: needs.plan.outputs.push == 'true'
         env:
           IMAGE: ${{ matrix.image }}
+          BUILD_CACHE: gha
         run: scripts/build.sh --smoke --push "$IMAGE"
 
   # Smoke-test published images (pushes that change tests/ without rebuilding the image)
@@ -129,6 +135,14 @@ jobs:
     name: smoke-test published ${{ matrix.image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DOCKERHUB_TOKEN" ]; then
+            echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          fi
       - env:
           IMAGE: ${{ matrix.image }}
         run: |

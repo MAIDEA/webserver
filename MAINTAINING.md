@@ -25,8 +25,12 @@ scripts/build.sh --smoke                    # all images
 ```
 
 Images are built for `linux/amd64`, also on Apple Silicon (through emulation, slower).
-`build.sh` always pulls fresh base images and fails if the built PHP version differs from its source
-(the official php image, or for legacy images the current Sury package, whose version it pins and records).
+`build.sh` builds from the current base image, pinned by digest (never a stale local copy), and fails if the built
+PHP version differs from its source (the official php image, or for legacy images the current Sury package, whose version
+it pins and records). Docker Hub allows 200 pulls an hour per account, shared with CI, and counts manifest GET requests
+but not HEAD requests: `build.sh` finds current digests with HEAD requests (`scripts/registry-digest.sh`), pins every image
+a Dockerfile uses (`*_IMAGE` build arguments), and checks tags through Docker Hub's web API. Images are downloaded only
+when they changed, so a full build needs about 10 pulls, and close to none when nothing changed.
 Immutable tags are never overwritten: when the name already exists on Docker Hub, `build.sh` adds `.2`, `.3`, ….
 
 ## Versions
@@ -57,6 +61,7 @@ The old per-version branches and tags are preserved as `archive/branch/*` and `a
 * `upstream-check.yml`: daily, rebuilds and publishes images whose sources have changed (`scripts/outdated-images.sh`):
   the base image (`org.opencontainers.image.base.digest` label set by `build.sh`) or, for legacy images,
   the Sury PHP package (`hr.maidea.php-package` label).
+* CI builds reuse layers from the GitHub Actions cache (`BUILD_CACHE=gha`, one cache per image), so unchanged layers are not rebuilt.
 * Requires the repository secret `DOCKERHUB_TOKEN` (Docker Hub access token, read & write) and the variable `DOCKERHUB_USERNAME`.
 
 ## Legacy images

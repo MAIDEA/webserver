@@ -3,9 +3,16 @@
 
 # PHP minor version of the official php image, e.g. 8.4 (patch releases are picked up on rebuild)
 ARG PHP_VERSION=8.4
+# Images used by the build; scripts/build.sh pins each to its current digest (*_IMAGE build arguments)
+ARG BASE_IMAGE=php:${PHP_VERSION}-apache-bookworm
+ARG EXTENSION_INSTALLER_IMAGE=mlocati/php-extension-installer:2.12.3
+ARG COMPOSER_IMAGE=composer:2
+
+FROM ${EXTENSION_INSTALLER_IMAGE} AS extension-installer
+FROM ${COMPOSER_IMAGE} AS composer
 
 # libmpdec for the decimal extension: not packaged in Debian 12, built from a checksum-verified tarball
-FROM php:${PHP_VERSION}-apache-bookworm AS mpdecimal
+FROM ${BASE_IMAGE} AS mpdecimal
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev make \
     && rm -rf /var/lib/apt/lists/*
 RUN cd /tmp \
@@ -18,7 +25,7 @@ RUN cd /tmp \
     && make install
 
 
-FROM php:${PHP_VERSION}-apache-bookworm AS base
+FROM ${BASE_IMAGE} AS base
 
 LABEL org.opencontainers.image.source="https://github.com/MAIDEA/webserver"
 
@@ -27,7 +34,7 @@ ENV LANG=C.UTF-8 \
     PHP_MEMORY_LIMIT=1024M \
     APACHE_DOCUMENT_ROOT=/src/app/webroot
 
-COPY --from=mlocati/php-extension-installer:2.12.3 /usr/bin/install-php-extensions /usr/local/bin/
+COPY --from=extension-installer /usr/bin/install-php-extensions /usr/local/bin/
 # COPY would turn the library symlinks into plain files, which the extension installer does not recognise
 COPY --from=mpdecimal /usr/local/lib/libmpdec.so.2.5.1 /usr/local/lib/
 COPY --from=mpdecimal /usr/local/include/mpdecimal.h /usr/local/include/
@@ -43,8 +50,10 @@ RUN ln -s libmpdec.so.2.5.1 /usr/local/lib/libmpdec.so.3 \
         apcu-${APCU_VERSION} \
         bcmath \
         decimal-${DECIMAL_VERSION} \
+        exif \
         imap-${IMAP_VERSION} \
         intl \
+        mysqli \
         opcache \
         pcntl \
         pdo_mysql \
@@ -87,14 +96,19 @@ RUN mkdir -p /var/www/healthcheck \
     && chown -R www-data:www-data /var/www \
     && chmod -R 755 /var/www
 
-# Reverse proxies: client IP and HTTPS from X-Forwarded-* headers (APACHE_TRUSTED_PROXIES)
+# Reverse proxies (APACHE_TRUSTED_PROXIES), request limits (APACHE_MAX_REQUEST_WORKERS, request body size),
+# hardening (no hidden files, shorter Timeout, nosniff); no server-status page or /cgi-bin/ alias
 COPY shared/apache/remoteip.conf /etc/apache2/conf-available/remoteip-proxy.conf
 COPY shared/apache/remoteip/ /etc/apache2/remoteip/
-COPY shared/apache/envvars-remoteip /tmp/
-RUN cat /tmp/envvars-remoteip >> /etc/apache2/envvars \
-    && rm /tmp/envvars-remoteip \
+COPY shared/apache/limits.conf /etc/apache2/conf-available/request-limits.conf
+COPY shared/apache/hardening.conf /etc/apache2/conf-available/hardening.conf
+COPY shared/apache/envvars-defaults /tmp/
+RUN cat /tmp/envvars-defaults >> /etc/apache2/envvars \
+    && rm /tmp/envvars-defaults \
     && a2enmod remoteip \
-    && a2enconf remoteip-proxy
+    && a2dismod -f status \
+    && a2disconf serve-cgi-bin \
+    && a2enconf remoteip-proxy request-limits hardening
 
 COPY config/php/common.ini /usr/local/etc/php/conf.d/zz-common.ini
 
@@ -105,7 +119,7 @@ WORKDIR /src
 
 EXPOSE 80
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --start-interval=2s --retries=3 \
     CMD curl -fsS --max-time 4 http://127.0.0.1:8081/ || exit 1
 
 ENTRYPOINT ["docker-webserver-entrypoint"]
@@ -120,7 +134,7 @@ RUN install-php-extensions xdebug-${XDEBUG_VERSION} \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+COPY --from=composer /usr/bin/composer /usr/local/bin/composer
 
 ENV XDEBUG_MODE=develop,debug \
     XDEBUG_REMOTE_HOST=host.docker.internal \

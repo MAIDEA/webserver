@@ -8,12 +8,17 @@ set -eo pipefail
 cd "$(dirname "$0")/.."
 REPO=maidea/webserver
 outdated=()
+# Each base image is looked up once, with a HEAD request (not counted against Docker Hub's pull limit)
+CACHE=$(mktemp -d)
+trap 'rm -rf "$CACHE"' EXIT
 
 while IFS=$'\t' read -r id tag base package; do
     labels=$(docker buildx imagetools inspect "$REPO:$tag" --format '{{json .Image}}' 2>/dev/null \
         | jq -c '(if has("config") then . else ."linux/amd64" end).config.Labels // {}' || echo '{}')
     built=$(jq -r '.["org.opencontainers.image.base.digest"] // empty' <<< "$labels")
-    current=$(docker buildx imagetools inspect "$base" --format '{{json .Manifest.Digest}}' | tr -d '"')
+    f="$CACHE/${base//[^A-Za-z0-9.-]/_}"
+    [ -f "$f" ] || scripts/registry-digest.sh "$base" > "$f"
+    current=$(cat "$f")
     if [ "$built" != "$current" ]; then
         echo "$id: base $base changed (built from ${built:-unknown}, now $current)" >&2
         outdated+=("$id")

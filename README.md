@@ -43,28 +43,33 @@ Older PHP versions are listed under [Legacy tags](#legacy-tags).
 | | prod | dev |
 |---|---|---|
 | Errors | logged to stderr (`docker logs`), not displayed | displayed and logged |
-| OPcache | on, JIT on, **no file timestamp checks** (see below) | off |
+| OPcache | on (JIT off), **no file timestamp checks** (see below) | off |
 | Xdebug | – | 3.x, trigger mode |
 | Composer, git | – | yes |
 | Upload / post size | 256M | 128M |
 | `max_execution_time` | 60 s | 180 s |
-| Session cookie | `secure` (configurable), `httponly`, strict mode | not `secure` |
+| Session cookie | `secure` (configurable), `httponly`, `SameSite=Lax`, strict mode | not `secure` |
 | Version headers | hidden (`Server: Apache`, no `X-Powered-By`) | shown |
 
 **prod: restart after code changes.** OPcache does not check file timestamps, so code changed on the mounted volume is only picked up after a container restart
 (or set `PHP_INI_OPCACHE__VALIDATE_TIMESTAMPS=1`).
+
+**prod: `SameSite=Lax` session cookies** are not sent with cross-site POST requests: if e.g. a payment provider posts
+back to your app, set `PHP_INI_SESSION__COOKIE_SAMESITE=None`.
 
 **Session upload progress is off** (`session.upload_progress.enabled = 0`, both variants) as recommended by PHP for
 CVE-2026-115560, which has no fix in PHP yet. Upload progress bars that rely on PHP sessions do not work.
 
 ## Included
 
-* PHP extensions: apcu, bcmath, decimal, gd (freetype, jpeg, webp), imap, intl, opcache, pcntl, pdo_mysql, pdo_pgsql, pgsql, shmop, soap, sockets, zip,
+* PHP extensions: apcu, bcmath, decimal, exif, gd (freetype, jpeg, webp), imap, intl, mysqli, opcache, pcntl, pdo_mysql, pdo_pgsql, pgsql, shmop, soap, sockets, zip,
   plus the extensions built into the official image (curl, mbstring, …); xdebug in dev
 * wkhtmltopdf 0.12.6.1 (patched qt) at `/usr/local/bin/wkhtmltopdf`.
   It is no longer maintained upstream and uses an old browser engine: do not render untrusted HTML or URLs with it.
 * MariaDB client (`mysql`, `mysqldump`); `install-php-extensions` to add PHP extensions (see [Building your own image](#building-your-own-image))
-* Apache with `mod_rewrite` and `mod_headers`; `.htaccess` files are honoured, directory listing is off
+* Apache with `mod_rewrite` and `mod_headers`; `.htaccess` files are honoured, directory listing is off.
+  Hidden files and folders (`.env`, `.git/`, …) are not served (`.well-known/` is), responses carry `X-Content-Type-Options: nosniff`,
+  and request bodies larger than `post_max_size` + 10% are rejected
 * Health check: Docker reports the container as `healthy` once Apache and PHP serve requests.
   It uses an internal listener on `127.0.0.1:8081` that is not reachable from outside the container and does not touch your app.
 
@@ -112,6 +117,8 @@ Good to know:
 * **HTTPS and reverse proxies:** the container serves plain HTTP on port 80; terminate HTTPS at a reverse proxy.
   Requests from proxies in `APACHE_TRUSTED_PROXIES` (default: private networks) get the client IP from `X-Forwarded-For`
   and `HTTPS=on` from `X-Forwarded-Proto: https`. If clients reach the container directly, set `APACHE_TRUSTED_PROXIES=none`.
+  Clients on a trusted (private) network can set these headers themselves: do not use the client IP for access control
+  unless `APACHE_TRUSTED_PROXIES` lists only your proxy.
   The prod images mark session cookies `secure`, so the app must be reached over HTTPS (or set `SESSION_COOKIE_SECURE=0`).
 * **Startup scripts:** `/docker-entrypoint.d/*.sh` run as root before Apache starts, e.g. for database migrations.
 * **Other frameworks:** e.g. for Laravel or Symfony set `APACHE_DOCUMENT_ROOT=/src/public`.
@@ -129,6 +136,7 @@ All variables are read at container start.
 | `APACHE_DOCUMENT_ROOT` | `/src/app/webroot` | both | |
 | `APACHE_TRUSTED_PROXIES` | private networks | both | reverse proxies whose `X-Forwarded-*` headers are used (CIDRs, space-separated), or `none` |
 | `WWW_DATA_UID`, `WWW_DATA_GID` | `33` | both | IDs of the user Apache and PHP run as |
+| `APACHE_MAX_REQUEST_WORKERS` | `150` | both | Apache/PHP processes per container (each takes tens of MB); lower it for small apps |
 | `XDEBUG_REMOTE_HOST` | `host.docker.internal` | dev | where the IDE listens; works on Docker Desktop, on Linux see `extra_hosts` above |
 | `XDEBUG_IDE_KEY` | `PHPSTORM` | dev | trigger value: send `XDEBUG_SESSION=PHPSTORM` (browser extension, cookie or query parameter) |
 | `XDEBUG_MODE` | `develop,debug` | dev | e.g. `debug,profile`, or `off` |
@@ -175,8 +183,10 @@ with these differences:
   then copy its ini file from `/etc/php/<version>/mods-available/` to `/usr/local/etc/php/conf.d/`.
 * Configuration stays in `/usr/local/etc/php` (`php.ini`, `conf.d/*.ini`); Debian's `/etc/php/<version>/*/conf.d` is not read.
 * `pcntl` is available on the command line only, not in Apache.
+* `mod_headers` is enabled, so `Header` lines in `.htaccess` files now take effect.
 
-Immutable tags, the health check, `PHP_INI_*`, `WWW_DATA_UID`/`GID`, `APACHE_TRUSTED_PROXIES` and startup scripts work as in the current images.
+Immutable tags, the health check, the Apache hardening, `PHP_INI_*`, `WWW_DATA_UID`/`GID`, `APACHE_*` variables and startup scripts
+work as in the current images (the request body limit stays at 110M).
 
 The 5.6 prod image (added October 2026) is the dev image without Xdebug, with errors logged but not displayed and version headers hidden.
 

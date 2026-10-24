@@ -5,7 +5,13 @@
 # config in /usr/local/etc/php (conf.d/*.ini, an optional php.ini), apache2-foreground, document root /src/app/webroot.
 # apache2-foreground and docker-php-entrypoint are from the official recipe (docker-library/php).
 
-FROM debian:bookworm-slim AS base
+# Images used by the build; scripts/build.sh pins each to its current digest (*_IMAGE build arguments)
+ARG BASE_IMAGE=debian:bookworm-slim
+ARG COMPOSER_IMAGE=composer:2.2
+
+FROM ${COMPOSER_IMAGE} AS composer
+
+FROM ${BASE_IMAGE} AS base
 
 # Version of Sury's php5.6 packages; scripts/build.sh passes the current one (empty: latest)
 ARG PHP_PACKAGE_VERSION=
@@ -110,7 +116,7 @@ RUN set -eux; \
     rm -rf /tmp/wkhtmltopdf.tar.xz /tmp/wkhtmltox
 
 # Composer 2.2 LTS, the last version that runs on PHP 5.6
-COPY --from=composer:2.2 /usr/bin/composer /usr/local/bin/composer
+COPY --from=composer /usr/bin/composer /usr/local/bin/composer
 
 # maidea: mitigations for CVE-2026-109618 / CVE-2026-109619 (PHP security advisory 2026-10-21, see README)
 # - no session upload progress: the confirmed path for the stale-state bug
@@ -138,25 +144,31 @@ RUN { \
     && a2enconf -q zz-cve-2026-mitigations
 
 # shared/ (passed by scripts/build.sh as the "shared" build context): health check on a loopback-only listener,
-# reverse-proxy support (APACHE_TRUSTED_PROXIES) and the entrypoint (WWW_DATA_UID/GID, PHP_INI_*, /docker-entrypoint.d/)
+# reverse proxies (APACHE_TRUSTED_PROXIES), request limits (APACHE_MAX_REQUEST_WORKERS; the body limit above stays),
+# hardening (no hidden files, shorter Timeout, nosniff), the entrypoint (WWW_DATA_UID/GID, PHP_INI_*, /docker-entrypoint.d/);
+# no server-status page or /cgi-bin/ alias
 COPY --from=shared apache/healthcheck.conf /etc/apache2/conf-available/healthcheck.conf
 COPY --from=shared apache/remoteip.conf /etc/apache2/conf-available/remoteip-proxy.conf
 COPY --from=shared apache/remoteip/ /etc/apache2/remoteip/
-COPY --from=shared apache/envvars-remoteip /tmp/
+COPY --from=shared apache/limits.conf /etc/apache2/conf-available/request-limits.conf
+COPY --from=shared apache/hardening.conf /etc/apache2/conf-available/hardening.conf
+COPY --from=shared apache/envvars-defaults /tmp/
 COPY --from=shared docker-webserver-entrypoint /usr/local/bin/
 RUN mkdir -p /var/www/healthcheck \
     && echo '<?php echo "ok";' > /var/www/healthcheck/index.php \
     && chown -R www-data:www-data /var/www/healthcheck \
     && a2enconf -q healthcheck \
-    && cat /tmp/envvars-remoteip >> /etc/apache2/envvars \
-    && rm /tmp/envvars-remoteip \
-    && a2enmod -q remoteip \
-    && a2enconf -q remoteip-proxy
+    && cat /tmp/envvars-defaults >> /etc/apache2/envvars \
+    && rm /tmp/envvars-defaults \
+    && a2enmod -q remoteip headers \
+    && a2dismod -q -f status \
+    && a2disconf -q serve-cgi-bin \
+    && a2enconf -q remoteip-proxy request-limits hardening
 
 COPY apache2-foreground docker-php-entrypoint /usr/local/bin/
 WORKDIR /src
 EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --start-interval=2s --retries=3 \
     CMD curl -fsS --max-time 4 http://127.0.0.1:8081/ || exit 1
 ENTRYPOINT ["docker-webserver-entrypoint"]
 CMD ["apache2-foreground"]
