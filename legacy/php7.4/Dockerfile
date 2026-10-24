@@ -132,12 +132,30 @@ RUN { \
     && echo 'if [ "${PHP_MEMORY_LIMIT:-}" = "-1" ]; then export PHP_MEMORY_MODE=unlimited; else export PHP_MEMORY_MODE=default; fi' >> /etc/apache2/envvars \
     && a2enconf -q zz-cve-2026-mitigations
 
+# shared/ (passed by scripts/build.sh as the "shared" build context): health check on a loopback-only listener,
+# reverse-proxy support (APACHE_TRUSTED_PROXIES) and the entrypoint (WWW_DATA_UID/GID, PHP_INI_*, /docker-entrypoint.d/)
+COPY --from=shared apache/healthcheck.conf /etc/apache2/conf-available/healthcheck.conf
+COPY --from=shared apache/remoteip.conf /etc/apache2/conf-available/remoteip-proxy.conf
+COPY --from=shared apache/remoteip/ /etc/apache2/remoteip/
+COPY --from=shared apache/envvars-remoteip /tmp/
+COPY --from=shared docker-webserver-entrypoint /usr/local/bin/
+RUN mkdir -p /var/www/healthcheck \
+    && echo '<?php echo "ok";' > /var/www/healthcheck/index.php \
+    && chown -R www-data:www-data /var/www/healthcheck \
+    && a2enconf -q healthcheck \
+    && cat /tmp/envvars-remoteip >> /etc/apache2/envvars \
+    && rm /tmp/envvars-remoteip \
+    && a2enmod -q remoteip \
+    && a2enconf -q remoteip-proxy
+
 COPY apache2-foreground docker-php-entrypoint /usr/local/bin/
 WORKDIR /src
 EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -fsS --max-time 4 http://127.0.0.1:8081/ || exit 1
 # https://httpd.apache.org/docs/2.4/stopping.html#gracefulstop
 STOPSIGNAL SIGWINCH
-ENTRYPOINT ["docker-php-entrypoint"]
+ENTRYPOINT ["docker-webserver-entrypoint"]
 CMD ["apache2-foreground"]
 
 

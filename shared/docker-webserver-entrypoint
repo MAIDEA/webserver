@@ -1,0 +1,42 @@
+#!/bin/sh
+# Entrypoint of the maidea/webserver images; ends in the official docker-php-entrypoint.
+#  - WWW_DATA_UID / WWW_DATA_GID: run Apache's www-data user with these IDs (e.g. your user's on a Linux host)
+#  - PHP_INI_<NAME>=<value>: PHP settings, e.g. PHP_INI_UPLOAD_MAX_FILESIZE=64M, PHP_INI_DATE__TIMEZONE=Europe/Zagreb
+#    (name lowercased, "__" becomes "."), written to $PHP_INI_DIR/conf.d/zzz-env.ini, which overrides the image's settings
+#  - /docker-entrypoint.d/*.sh: run in name order before Apache starts (executable files are run, others sourced)
+set -e
+
+if [ "$(id -u)" = 0 ]; then
+    if [ -n "${WWW_DATA_GID:-}" ] && [ "$(getent group www-data | cut -d: -f3)" != "$WWW_DATA_GID" ]; then
+        groupmod -o -g "$WWW_DATA_GID" www-data
+    fi
+    if [ -n "${WWW_DATA_UID:-}" ] && [ "$(id -u www-data)" != "$WWW_DATA_UID" ]; then
+        usermod -o -u "$WWW_DATA_UID" www-data
+    fi
+fi
+
+ini="$PHP_INI_DIR/conf.d/zzz-env.ini"
+settings=$(env | grep '^PHP_INI_' | grep -v -e '^PHP_INI_DIR=' -e '^PHP_INI_SCAN_DIR=' || true)
+if [ -w "$PHP_INI_DIR/conf.d" ]; then
+    printf '%s\n' "$settings" | while IFS='=' read -r name value; do
+        [ -n "$name" ] || continue
+        key=$(printf '%s' "${name#PHP_INI_}" | tr '[:upper:]' '[:lower:]' | sed 's/__/./g')
+        printf '%s = "%s"\n' "$key" "$value"
+    done > "$ini"
+elif [ -n "$settings" ]; then
+    echo "$0: cannot write $ini (not running as root), ignoring PHP_INI_* variables" >&2
+fi
+
+case "$1" in
+    apache2-foreground | -*)
+        for f in /docker-entrypoint.d/*.sh; do
+            [ -e "$f" ] || continue
+            echo "$0: running $f"
+            # the permission bits, not "test -x": for root that is true on some mounts (e.g. Docker Desktop) without them
+            # shellcheck disable=SC1090
+            if [ -n "$(find "$f" -maxdepth 0 -perm -u=x)" ]; then "$f"; else . "$f"; fi
+        done
+        ;;
+esac
+
+exec docker-php-entrypoint "$@"

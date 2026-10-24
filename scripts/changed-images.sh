@@ -8,16 +8,16 @@ set -eo pipefail
 cd "$(dirname "$0")/.."
 changed=$(git diff --name-only "$1" HEAD)
 
-# Pull requests: build tooling and smoke tests affect every image.
+# Pull requests: build tooling, files shared by all images (shared/) and smoke tests affect every image.
 # changed-images.sh and outdated-images.sh only decide what to build, so they are not included.
-if [ "$2" != --publish ] && grep -qE '^(scripts/(build|php-package-version)\.sh|tests/|\.github/workflows/build\.yml)' <<< "$changed"; then
+if [ "$2" != --publish ] && grep -qE '^(shared/|scripts/(build|php-package-version)\.sh|tests/|\.github/workflows/build\.yml)' <<< "$changed"; then
     jq -c '[.images[].id]' matrix.json
     exit
 fi
 
-# Publishing: build tooling changes republish the tracked images
+# Publishing: build tooling and shared/ changes republish the tracked images
 tooling=false
-if grep -qE '^(scripts/(build|php-package-version)\.sh|\.github/workflows/build\.yml)' <<< "$changed"; then tooling=true; fi
+if grep -qE '^(shared/|scripts/(build|php-package-version)\.sh|\.github/workflows/build\.yml)' <<< "$changed"; then tooling=true; fi
 
 # Plus images whose matrix.json entry is new or changed, and images whose build context changed
 old=$(git show "$1:matrix.json" 2>/dev/null || echo '{"images": []}')

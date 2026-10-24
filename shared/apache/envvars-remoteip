@@ -1,0 +1,5 @@
+
+# maidea/webserver: reverse proxies whose X-Forwarded-For / X-Forwarded-Proto are trusted (remoteip.conf)
+: "${APACHE_TRUSTED_PROXIES:=10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.0/8 fc00::/7}"
+export APACHE_TRUSTED_PROXIES
+if [ "$APACHE_TRUSTED_PROXIES" = none ]; then export APACHE_REMOTEIP=off; else export APACHE_REMOTEIP=on; fi

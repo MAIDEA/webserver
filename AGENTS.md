@@ -8,7 +8,8 @@ maintainer notes go in `MAINTAINING.md`. The images are offered as-is, best effo
 ## Layout
 - `Dockerfile`: current PHP 8.x images (versions in `matrix.json`). Stages: `mpdecimal` (checksum-verified libmpdec build), `base`, `dev`, `prod` (default target).
   PHP extensions are installed with `install-php-extensions` (mlocati/docker-php-extension-installer, pinned).
-- `config/php/*.ini`, `config/apache/*.conf`: copied into the images; `common.ini` is shared, the rest is per target.
+- `config/php/*.ini`, `config/apache/*.conf`: copied into the 8.x images; `common.ini` is shared, the rest is per target.
+- `shared/`: used by all images (entrypoint, health check, reverse-proxy config); the legacy Dockerfiles get it as the `shared` build context from `build.sh`.
 - `legacy/php<version>/`: end-of-life PHP versions for internal projects: Debian 12 + PHP from Sury's packages (security backports),
   targets `prod`/`dev`. They must keep behaving like the earlier images (extensions in `extensions.txt`/`modules.txt`,
   checked at build time). Change only to keep them building, secure or compatible.

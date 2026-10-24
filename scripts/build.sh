@@ -37,6 +37,8 @@ for id in "${IDS[@]}"; do
 
     # --pull: never build from a stale local copy of a public base image
     args=(--platform "$PLATFORM" --load --pull)
+    # Files used by all images; the legacy Dockerfiles COPY --from=shared
+    args+=(--build-context shared=shared)
     [ "$(field .target)" != null ] && args+=(--target "$(field .target)")
     while IFS= read -r kv; do args+=(--build-arg "$kv"); done < <(field '.args | to_entries[] | "\(.key)=\(.value)"')
     # Recorded so the upstream check can tell when the base image has changed

@@ -20,16 +20,18 @@ Serves `./src/app/webroot` on http://localhost:8080. For other layouts set `APAC
 
 | Tags | PHP | Variant |
 |---|---|---|
+| `prod-apache-php8.5` | 8.5 | prod |
 | `latest`, `prod-apache-php`, `prod-apache-php8`, `prod-apache-php8.4` | 8.4 | prod |
 | `prod-apache-php8.3` | 8.3 | prod |
+| `dev-apache-php8.5` | 8.5 | dev |
 | `dev-apache-php`, `dev-apache-php8`, `dev-apache-php8.4` | 8.4 | dev |
 | `dev-apache-php8.3` | 8.3 | dev |
 
 Which tag to use:
 
 * **`prod-apache-php8.4`, `dev-apache-php8.3`, …** stay on that PHP version and only receive patch releases. Recommended.
-* **`latest`, `prod-apache-php`, `prod-apache-php8`, `dev-apache-php`, `dev-apache-php8`** move to the newest PHP version when one is added
-  (e.g. 8.5), which can break your app.
+* **`latest`, `prod-apache-php`, `prod-apache-php8`, `dev-apache-php`, `dev-apache-php8`** move to a newer PHP version over time
+  (currently 8.4), which can break your app.
 * **Immutable tags** `<tag>-<php version>-<build date>` (e.g. `prod-apache-php8.4.27-20261022`, `.2` etc. for further builds that day)
   are never overwritten: pin one for reproducible deploys or to roll back.
 
@@ -49,7 +51,8 @@ Older PHP versions are listed under [Legacy tags](#legacy-tags).
 | Session cookie | `secure` (configurable), `httponly`, strict mode | not `secure` |
 | Version headers | hidden (`Server: Apache`, no `X-Powered-By`) | shown |
 
-**prod: restart after code changes.** OPcache does not check file timestamps, so code changed on the mounted volume is only picked up after a container restart.
+**prod: restart after code changes.** OPcache does not check file timestamps, so code changed on the mounted volume is only picked up after a container restart
+(or set `PHP_INI_OPCACHE__VALIDATE_TIMESTAMPS=1`).
 
 **Session upload progress is off** (`session.upload_progress.enabled = 0`, both variants) as recommended by PHP for
 CVE-2026-115560, which has no fix in PHP yet. Upload progress bars that rely on PHP sessions do not work.
@@ -60,7 +63,7 @@ CVE-2026-115560, which has no fix in PHP yet. Upload progress bars that rely on 
   plus the extensions built into the official image (curl, mbstring, …); xdebug in dev
 * wkhtmltopdf 0.12.6.1 (patched qt) at `/usr/local/bin/wkhtmltopdf`.
   It is no longer maintained upstream and uses an old browser engine: do not render untrusted HTML or URLs with it.
-* MariaDB client (`mysql`, `mysqldump`)
+* MariaDB client (`mysql`, `mysqldump`); `install-php-extensions` to add PHP extensions (see [Building your own image](#building-your-own-image))
 * Apache with `mod_rewrite` and `mod_headers`; `.htaccess` files are honoured, directory listing is off
 * Health check: Docker reports the container as `healthy` once Apache and PHP serve requests.
   It uses an internal listener on `127.0.0.1:8081` that is not reachable from outside the container and does not touch your app.
@@ -105,8 +108,12 @@ services:
 Good to know:
 
 * **File permissions:** PHP runs as `www-data` (uid 33). Directories your app writes to (e.g. `app/tmp`) must be writable for that user.
-* **HTTPS:** the container serves plain HTTP on port 80; terminate HTTPS at a reverse proxy.
+  On a Linux host, `WWW_DATA_UID` / `WWW_DATA_GID` can give it your user's IDs instead.
+* **HTTPS and reverse proxies:** the container serves plain HTTP on port 80; terminate HTTPS at a reverse proxy.
+  Requests from proxies in `APACHE_TRUSTED_PROXIES` (default: private networks) get the client IP from `X-Forwarded-For`
+  and `HTTPS=on` from `X-Forwarded-Proto: https`. If clients reach the container directly, set `APACHE_TRUSTED_PROXIES=none`.
   The prod images mark session cookies `secure`, so the app must be reached over HTTPS (or set `SESSION_COOKIE_SECURE=0`).
+* **Startup scripts:** `/docker-entrypoint.d/*.sh` run as root before Apache starts, e.g. for database migrations.
 * **Other frameworks:** e.g. for Laravel or Symfony set `APACHE_DOCUMENT_ROOT=/src/public`.
 * **Logs:** Apache and PHP log to the container output (`docker logs`).
 
@@ -116,15 +123,32 @@ All variables are read at container start.
 
 | Variable | Default | Variant | Notes |
 |---|---|---|---|
+| `PHP_INI_<NAME>` | | both | any PHP setting, e.g. `PHP_INI_UPLOAD_MAX_FILESIZE=64M`, `PHP_INI_DATE__TIMEZONE=Europe/Zagreb` (name lowercased, `__` becomes `.`) |
 | `PHP_MEMORY_LIMIT` | `1024M` | both | PHP `memory_limit` |
 | `SESSION_COOKIE_SECURE` | `1` | prod | set to `0` only if the app is served over plain HTTP |
 | `APACHE_DOCUMENT_ROOT` | `/src/app/webroot` | both | |
+| `APACHE_TRUSTED_PROXIES` | private networks | both | reverse proxies whose `X-Forwarded-*` headers are used (CIDRs, space-separated), or `none` |
+| `WWW_DATA_UID`, `WWW_DATA_GID` | `33` | both | IDs of the user Apache and PHP run as |
 | `XDEBUG_REMOTE_HOST` | `host.docker.internal` | dev | where the IDE listens; works on Docker Desktop, on Linux see `extra_hosts` above |
 | `XDEBUG_IDE_KEY` | `PHPSTORM` | dev | trigger value: send `XDEBUG_SESSION=PHPSTORM` (browser extension, cookie or query parameter) |
 | `XDEBUG_MODE` | `develop,debug` | dev | e.g. `debug,profile`, or `off` |
 | `XDEBUG_REMOTE_PORT` | `9003` | dev | |
 | `XDEBUG_OUTPUT_DIR` | `/tmp` | dev | profiler/trace output |
 | `XDEBUG_OUTPUT_PROFILE_NAME` | `cachegrind.out.%p` | dev | |
+
+## Building your own image
+
+```dockerfile
+FROM maidea/webserver:prod-apache-php8.4
+# more PHP extensions: https://github.com/mlocati/docker-php-extension-installer
+RUN install-php-extensions redis
+# the prod images have no Composer
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+COPY . /src
+RUN composer install --no-dev --optimize-autoloader
+# runs before Apache starts
+COPY docker/migrate.sh /docker-entrypoint.d/10-migrate.sh
+```
 
 ## Legacy tags
 
@@ -151,6 +175,8 @@ with these differences:
   then copy its ini file from `/etc/php/<version>/mods-available/` to `/usr/local/etc/php/conf.d/`.
 * Configuration stays in `/usr/local/etc/php` (`php.ini`, `conf.d/*.ini`); Debian's `/etc/php/<version>/*/conf.d` is not read.
 * `pcntl` is available on the command line only, not in Apache.
+
+Immutable tags, the health check, `PHP_INI_*`, `WWW_DATA_UID`/`GID`, `APACHE_TRUSTED_PROXIES` and startup scripts work as in the current images.
 
 The 5.6 prod image (added October 2026) is the dev image without Xdebug, with errors logged but not displayed and version headers hidden.
 

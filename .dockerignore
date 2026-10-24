@@ -1,3 +1,4 @@
 # Allowlist: send only what the Dockerfile COPYs (keeps .git, IDE files and any local .env out of the build)
 *
 !config/
+!shared/

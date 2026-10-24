@@ -78,15 +78,28 @@ RUN a2enmod rewrite headers \
     && sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
     && sed -ri -e 's!/var/www/!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
-# Copied after the document-root rewrite above, which would otherwise rewrite its /var/www/ path
-COPY config/apache/healthcheck.conf /etc/apache2/conf-available/healthcheck.conf
+# shared/: also used by the legacy images
+# Health check, copied after the document-root rewrite above, which would otherwise rewrite its /var/www/ path
+COPY shared/apache/healthcheck.conf /etc/apache2/conf-available/healthcheck.conf
 RUN mkdir -p /var/www/healthcheck \
     && echo '<?php echo "ok";' > /var/www/healthcheck/index.php \
     && a2enconf healthcheck \
     && chown -R www-data:www-data /var/www \
     && chmod -R 755 /var/www
 
+# Reverse proxies: client IP and HTTPS from X-Forwarded-* headers (APACHE_TRUSTED_PROXIES)
+COPY shared/apache/remoteip.conf /etc/apache2/conf-available/remoteip-proxy.conf
+COPY shared/apache/remoteip/ /etc/apache2/remoteip/
+COPY shared/apache/envvars-remoteip /tmp/
+RUN cat /tmp/envvars-remoteip >> /etc/apache2/envvars \
+    && rm /tmp/envvars-remoteip \
+    && a2enmod remoteip \
+    && a2enconf remoteip-proxy
+
 COPY config/php/common.ini /usr/local/etc/php/conf.d/zz-common.ini
+
+# WWW_DATA_UID/GID, PHP_INI_* settings and /docker-entrypoint.d/ hooks, then the official entrypoint
+COPY shared/docker-webserver-entrypoint /usr/local/bin/
 
 WORKDIR /src
 
@@ -95,6 +108,7 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -fsS --max-time 4 http://127.0.0.1:8081/ || exit 1
 
+ENTRYPOINT ["docker-webserver-entrypoint"]
 CMD ["apache2-foreground"]
 
 

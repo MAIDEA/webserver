@@ -18,4 +18,8 @@ echo json_encode(array(
     'max_input_nesting_level' => ini_get('max_input_nesting_level'),
     'memory_limit' => ini_get('memory_limit'),
     'memory_limit_overridable' => @ini_set('memory_limit', '256M') !== false,
+    'max_execution_time' => ini_get('max_execution_time'),
+    'remote_addr' => $_SERVER['REMOTE_ADDR'],
+    'https' => isset($_SERVER['HTTPS']) ? $_SERVER['HTTPS'] : '',
+    'euid' => function_exists('posix_geteuid') ? posix_geteuid() : null,
 )), "\n";

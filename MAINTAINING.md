@@ -6,7 +6,8 @@ Notes for maintainers. Image usage is documented in [README.md](README.md).
 
 ```
 Dockerfile          PHP 8.3/8.4 images; build targets prod (default) and dev
-config/             PHP ini and Apache config copied into the images
+config/             PHP ini and Apache config copied into the 8.x images
+shared/             used by all images: entrypoint (WWW_DATA_UID/GID, PHP_INI_*, /docker-entrypoint.d/), health check, reverse-proxy config
 legacy/php*/        end-of-life PHP versions (5.6, 7.4): Debian 12 + Sury's PHP packages, targets prod and dev
 matrix.json         every published image: build context, target, build args, tags
 scripts/build.sh    builds images from matrix.json (used by CI and locally)
@@ -49,7 +50,7 @@ The old per-version branches and tags are preserved as `archive/branch/*` and `a
 * `build.yml`: pull requests build and smoke-test the affected images; pushes to `master` also publish them.
   Manual runs take image ids (or `all`) and an optional push. `scripts/changed-images.sh` decides what is affected:
   * an image's own files, or its entry in `matrix.json`: that image
-  * `scripts/build.sh`, `scripts/php-package-version.sh`, `build.yml`: every image in pull requests;
+  * `shared/`, `scripts/build.sh`, `scripts/php-package-version.sh`, `build.yml`: every image in pull requests;
     when publishing, the images that track upstream (all current images)
   * `tests/`: every image in pull requests; when publishing, nothing is rebuilt and the published images are smoke-tested
   * docs: nothing
@@ -68,3 +69,4 @@ The old per-version branches and tags are preserved as `archive/branch/*` and `a
   Apache setup, with PHP reading `/usr/local/etc/php` (`PHPRC`, `PHP_INI_SCAN_DIR`) instead of Debian's `/etc/php`.
 * Extension versions outside the PHP package (apcu, mcrypt, xdebug) come from Sury and are checked to stay within a minor version.
 * Keep them like this: change only what keeps them building, secure or compatible with the apps that use them.
+* They get `shared/` through a named build context (`COPY --from=shared`, passed by `build.sh`), so build them with `build.sh`.

@@ -25,8 +25,32 @@ cid=$(docker run -d "${P[@]}" --network "$NET" --name "$NAME" -v "$FIXTURES:/src
 trap 'docker rm -f "$cid" >/dev/null 2>&1; docker network rm "$NET" >/dev/null 2>&1' EXIT
 inside() { docker exec "$cid" "$@"; }
 
+# All images: health check, reverse proxies, entrypoint (WWW_DATA_UID/GID, PHP_INI_*, /docker-entrypoint.d/)
+for _ in $(seq 1 40); do
+    health=$(docker inspect -f '{{.State.Health.Status}}' "$cid")
+    [ "$health" = healthy ] && break
+    sleep 2
+done
+check "docker health status" "$health" healthy
+check "health probe" "$(inside curl -fsS http://127.0.0.1:8081/)" ok
+check "health port unreachable from other containers" \
+    "$(docker run --rm "${P[@]}" --network "$NET" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' --max-time 3 "http://$NAME:8081/" 2>/dev/null)" 000
+probe=$(inside curl -s -H 'X-Forwarded-For: 203.0.113.7' -H 'X-Forwarded-Proto: https' http://localhost/)
+check "client IP from a trusted proxy" "$(echo "$probe" | json remote_addr)" 203.0.113.7
+check "HTTPS from a trusted proxy" "$(echo "$probe" | json https)" on
+check "client IP in access log" "$(docker logs "$cid" 2>/dev/null | grep -c '^203\.0\.113\.7 ')" 1
+check "health checks not in access log" "$(docker logs "$cid" 2>&1 | grep -c ':8081')" 0
+env=$(docker run -d "${P[@]}" -v "$FIXTURES:/src:ro" -v "$(dirname "$FIXTURES")/entrypoint.d:/docker-entrypoint.d:ro" \
+    -e WWW_DATA_UID=1234 -e WWW_DATA_GID=1234 -e PHP_INI_MAX_EXECUTION_TIME=77 -e APACHE_TRUSTED_PROXIES=none "$IMAGE")
+sleep 5
+probe=$(docker exec "$env" curl -s -H 'X-Forwarded-For: 203.0.113.7' http://localhost/)
+check "WWW_DATA_UID (Apache's user)" "$(echo "$probe" | json euid)" 1234
+check "PHP_INI_MAX_EXECUTION_TIME" "$(echo "$probe" | json max_execution_time)" 77
+check "APACHE_TRUSTED_PROXIES=none" "$(echo "$probe" | json remote_addr)" 127.0.0.1
+check "startup hook ran" "$(docker exec "$env" cat /tmp/hook-ran)" "hook ran"
+docker rm -f "$env" >/dev/null
+
 if [ "$KIND" = legacy ]; then
-    sleep 5
     probe=$(inside curl -s http://localhost/)
     check "PHP served by Apache" "$(echo "$probe" | json php)" "$version"
     check "CVE-2026-109618/109619 patch in image" \
@@ -53,15 +77,6 @@ check "CLI argv" "$(docker run --rm "${P[@]}" "$IMAGE" php -r 'echo $argv[1];' -
 check "wkhtmltopdf renders a PDF" \
     "$(docker run --rm "${P[@]}" "$IMAGE" sh -c 'echo "<h1>smoke</h1>" > /tmp/a.html && wkhtmltopdf -q /tmp/a.html /tmp/a.pdf >/dev/null 2>&1; head -c 5 /tmp/a.pdf')" "%PDF-"
 
-for _ in $(seq 1 40); do
-    health=$(docker inspect -f '{{.State.Health.Status}}' "$cid")
-    [ "$health" = healthy ] && break
-    sleep 2
-done
-check "docker health status" "$health" healthy
-check "health probe" "$(inside curl -fsS http://127.0.0.1:8081/)" ok
-check "health port unreachable from other containers" \
-    "$(docker run --rm "${P[@]}" --network "$NET" curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' --max-time 3 "http://$NAME:8081/" 2>/dev/null)" 000
 check ".htaccess rewrite" "$(inside curl -s -o /dev/null -w '%{http_code}' http://localhost/rw-test)" 200
 check "mod_headers via .htaccess" "$(inside curl -sI http://localhost/rw-test | grep -i '^x-smoke-header' | tr -d '\r')" "X-Smoke-Header: yes"
 check "no directory listing" "$(inside curl -s -o /dev/null -w '%{http_code}' http://localhost/dir/)" 403
@@ -71,7 +86,6 @@ check "APCu through Apache" "$(echo "$probe" | json apcu_roundtrip)" True
 check "decimal through Apache" "$(echo "$probe" | json decimal)" 0.3
 check "imap available" "$(echo "$probe" | json imap)" True
 check "session upload progress off" "$(echo "$probe" | json upload_progress)" 0
-check "health checks not in access log" "$(docker logs "$cid" 2>&1 | grep -c ':8081')" 0
 
 if [ "$KIND" = prod ]; then
     headers=$(inside curl -sI http://localhost/)
