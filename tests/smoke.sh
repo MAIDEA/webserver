@@ -70,6 +70,7 @@ probe=$(inside curl -s http://localhost/)
 check "APCu through Apache" "$(echo "$probe" | json apcu_roundtrip)" True
 check "decimal through Apache" "$(echo "$probe" | json decimal)" 0.3
 check "imap available" "$(echo "$probe" | json imap)" True
+check "session upload progress off" "$(echo "$probe" | json upload_progress)" 0
 check "health checks not in access log" "$(docker logs "$cid" 2>&1 | grep -c ':8081')" 0
 
 if [ "$KIND" = prod ]; then

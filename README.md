@@ -51,6 +51,9 @@ Older PHP versions are listed under [Legacy tags](#legacy-tags).
 
 **prod: restart after code changes.** OPcache does not check file timestamps, so code changed on the mounted volume is only picked up after a container restart.
 
+**Session upload progress is off** (`session.upload_progress.enabled = 0`, both variants) as recommended by PHP for
+CVE-2026-115560, which has no fix in PHP yet. Upload progress bars that rely on PHP sessions do not work.
+
 ## Included
 
 * PHP extensions: apcu, bcmath, decimal, gd (freetype, jpeg, webp), imap, intl, opcache, pcntl, pdo_mysql, pdo_pgsql, pgsql, shmop, soap, sockets, zip,
