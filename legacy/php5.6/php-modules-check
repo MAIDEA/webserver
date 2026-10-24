@@ -1,0 +1,14 @@
+#!/bin/sh
+# Build-time check: PHP starts without warnings and "php -m" lists exactly the modules in
+# /usr/local/share/php/modules.txt, plus the extra modules given as arguments.
+# Usage: php-modules-check [extra module ...]
+set -e
+
+if php -v 2>&1 | grep -qiE 'warning|error'; then
+    php -v
+    exit 1
+fi
+{ grep -v '^#' /usr/local/share/php/modules.txt; for m in "$@"; do echo "$m"; done; } | sort -fu > /tmp/modules.expected
+php -m | grep -v -e '^\[' -e '^$' | sort -fu > /tmp/modules.actual
+diff /tmp/modules.expected /tmp/modules.actual
+rm /tmp/modules.expected /tmp/modules.actual

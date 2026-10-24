@@ -7,10 +7,10 @@ Notes for maintainers. Image usage is documented in [README.md](README.md).
 ```
 Dockerfile          PHP 8.3/8.4 images; build targets prod (default) and dev
 config/             PHP ini and Apache config copied into the images
-legacy/             Dockerfiles for PHP 5.6 and 7.4 (security fixes only)
-legacy/php*-base/   official php image recipes for 5.6/7.4, rebuilt with security patches
+legacy/php*/        end-of-life PHP versions (5.6, 7.4): Debian 12 + Sury's PHP packages, targets prod and dev
 matrix.json         every published image: build context, target, build args, tags
 scripts/build.sh    builds images from matrix.json (used by CI and locally)
+scripts/*-images.sh decide what CI builds: changed-images.sh (per change), outdated-images.sh (daily)
 tests/smoke.sh      checks an image through a running container
 .github/workflows/  CI: build.yml (build, test, push) and upstream-check.yml (daily rebuilds)
 ```
@@ -24,7 +24,8 @@ scripts/build.sh --smoke                    # all images
 ```
 
 Images are built for `linux/amd64`, also on Apple Silicon (through emulation, slower).
-`build.sh` always pulls fresh base images and fails if the built PHP version differs from the current upstream image.
+`build.sh` always pulls fresh base images and fails if the built PHP version differs from its source
+(the official php image, or for legacy images the current Sury package, whose version it pins and records).
 Immutable tags are never overwritten: when the name already exists on Docker Hub, `build.sh` adds `.2`, `.3`, ….
 
 ## Versions
@@ -48,20 +49,22 @@ The old per-version branches and tags are preserved as `archive/branch/*` and `a
 * `build.yml`: pull requests build and smoke-test the affected images; pushes to `master` also publish them.
   Manual runs take image ids (or `all`) and an optional push. `scripts/changed-images.sh` decides what is affected:
   * an image's own files, or its entry in `matrix.json`: that image
-  * `scripts/build.sh`, `build.yml`: every image in pull requests; when publishing, only the images that track upstream
-    (frozen legacy images are republished only when their own files change)
+  * `scripts/build.sh`, `scripts/php-package-version.sh`, `build.yml`: every image in pull requests;
+    when publishing, the images that track upstream (all current images)
   * `tests/`: every image in pull requests; when publishing, nothing is rebuilt and the published images are smoke-tested
   * docs: nothing
-* `upstream-check.yml`: daily, rebuilds and publishes images whose official php base image has changed
-  (compares the `org.opencontainers.image.base.digest` label set by `build.sh`).
+* `upstream-check.yml`: daily, rebuilds and publishes images whose sources have changed (`scripts/outdated-images.sh`):
+  the base image (`org.opencontainers.image.base.digest` label set by `build.sh`) or, for legacy images,
+  the Sury PHP package (`hr.maidea.php-package` label).
 * Requires the repository secret `DOCKERHUB_TOKEN` (Docker Hub access token, read & write) and the variable `DOCKERHUB_USERNAME`.
 
 ## Legacy images
 
-* `legacy/php7.4-base` and `legacy/php5.6-base` are the official docker-library recipes, changed only where marked `maidea:`.
-  `patches/` holds the security patches applied to the signature-verified PHP release tarballs:
-  * 7.4: [php/php-src@712e60f9edfd](https://github.com/php/php-src/commit/712e60f9edfd) (PHP security team backport)
-  * 5.6: patch 0261 of php5.6 5.6.40-104 from [packages.sury.org](https://packages.sury.org/php/) (Ondřej Surý's backport of the same fix)
-* The bases are built locally first (`prebuild` in `matrix.json`) as `maidea-local/php:*` and are never pushed.
-* 7.4 installs packages from `archive.debian.org` (Debian 11 is out of support).
-* 5.6 can only be rebuilt until **2027-04-12**, when the Debian key that still verifies its package archive expires.
+* `legacy/php5.6` and `legacy/php7.4` install PHP from [packages.sury.org](https://packages.sury.org/php/) on Debian 12
+  (`debian:bookworm-slim`). Sury's packages carry backported security fixes; the Dockerfiles refuse package versions
+  older than the CVE-2026-109618/109619 fix (`PHP_PACKAGE_MIN`).
+* They reproduce the earlier images built from the official php recipe: same extensions (`extensions.txt` = Debian ini
+  files to load, `modules.txt` = expected `php -m`, checked at build time by `php-modules-check`), settings, tools and
+  Apache setup, with PHP reading `/usr/local/etc/php` (`PHPRC`, `PHP_INI_SCAN_DIR`) instead of Debian's `/etc/php`.
+* Extension versions outside the PHP package (apcu, mcrypt, xdebug) come from Sury and are checked to stay within a minor version.
+* Keep them like this: change only what keeps them building, secure or compatible with the apps that use them.

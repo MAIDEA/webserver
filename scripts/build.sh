@@ -36,35 +36,39 @@ for id in "${IDS[@]}"; do
     field() { jq -r "$1" <<< "$img"; }
 
     # --pull: never build from a stale local copy of a public base image
-    # (images with a prebuild use the local maidea-local/* base instead; their prebuild pulls)
-    args=(--platform "$PLATFORM" --load)
-    [ "$(field .prebuild)" = null ] && args+=(--pull)
+    args=(--platform "$PLATFORM" --load --pull)
     [ "$(field .target)" != null ] && args+=(--target "$(field .target)")
     while IFS= read -r kv; do args+=(--build-arg "$kv"); done < <(field '.args | to_entries[] | "\(.key)=\(.value)"')
-    if [ "$(field .base)" != null ]; then
-        # Recorded so the upstream check can tell when the base image has changed
-        base_digest=$(docker buildx imagetools inspect "$(field .base)" --format '{{json .Manifest.Digest}}' | tr -d '"')
-        args+=(--label "org.opencontainers.image.base.name=docker.io/library/$(field .base)")
-        args+=(--label "org.opencontainers.image.base.digest=$base_digest")
+    # Recorded so the upstream check can tell when the base image has changed
+    base_digest=$(docker buildx imagetools inspect "$(field .base)" --format '{{json .Manifest.Digest}}' | tr -d '"')
+    args+=(--label "org.opencontainers.image.base.name=docker.io/library/$(field .base)")
+    args+=(--label "org.opencontainers.image.base.digest=$base_digest")
+    if [ "$(field .php_package)" != null ]; then
+        # PHP from a package (legacy images): build its current version and record it for the upstream check
+        package_version=$(scripts/php-package-version.sh "$(field .php_package)")
+        args+=(--build-arg "PHP_PACKAGE_VERSION=$package_version")
+        args+=(--label "hr.maidea.php-package=$(field .php_package)=$package_version")
     fi
     tags=()
     while IFS= read -r t; do tags+=("$REPO:$t"); done < <(field '.tags[]')
     for t in "${tags[@]}"; do args+=(-t "$t"); done
 
     echo "::group::build $id"
-    if [ "$(field .prebuild)" != null ]; then
-        # Local base image the Dockerfile builds FROM (e.g. the patched PHP 7.4); never pulled or pushed
-        docker buildx build --platform "$PLATFORM" --pull --load -t "$(field .prebuild.tag)" "$(field .prebuild.context)"
-    fi
     docker buildx build "${args[@]}" "$(field .context)"
     echo "::endgroup::"
 
-    php_version=$(docker run --rm --platform "$PLATFORM" "${tags[0]}" php -r 'echo PHP_VERSION;')
-    if [ "$(field .base)" != null ]; then
+    # x.y.z without a distribution suffix (Debian's PHP_VERSION is e.g. 5.6.40-105+0~...)
+    php_version=$(docker run --rm --platform "$PLATFORM" "${tags[0]}" php -r 'echo PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION, ".", PHP_RELEASE_VERSION;')
+    # The built PHP version must be the one of its source: the PHP package, or the official php base image
+    if [ "$(field .php_package)" != null ]; then
+        source="$(field .php_package) $package_version"
+        upstream=$(sed -E 's/^[0-9]+://; s/-.*$//' <<< "$package_version")
+    else
+        source=$(field .base)
         upstream=$(docker buildx imagetools inspect "$(field .base)" --format '{{json .Image}}' \
             | jq -r '."linux/amd64".config.Env[] | select(startswith("PHP_VERSION=")) | sub("PHP_VERSION="; "")')
-        [ "$php_version" = "$upstream" ] || { echo "$id: built PHP $php_version, but $(field .base) is PHP $upstream" >&2; exit 1; }
     fi
+    [ "$php_version" = "$upstream" ] || { echo "$id: built PHP $php_version, but $source is PHP $upstream" >&2; exit 1; }
     if [ "$(field .immutable_prefix)" != null ]; then
         # Immutable tags are never overwritten: if the name already exists (e.g. a second build that day), add .2, .3, ...
         immutable="$REPO:$(field .immutable_prefix)$php_version-$DATE" n=1

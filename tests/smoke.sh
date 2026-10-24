@@ -18,7 +18,7 @@ json() { python3 -I -c "import sys,json; print(json.load(sys.stdin).get('$1'))";
 echo "== smoke $IMAGE ($KIND, PHP $PHP)"
 check "architecture" "$(docker image inspect -f '{{.Architecture}}' "$IMAGE")" amd64
 version=$(docker run --rm "${P[@]}" "$IMAGE" php -r 'echo PHP_VERSION;')
-check "PHP $PHP.x" "${version%.*}" "$PHP"
+check "PHP $PHP.x" "$(docker run --rm "${P[@]}" "$IMAGE" php -r 'echo PHP_MAJOR_VERSION, ".", PHP_MINOR_VERSION;')" "$PHP"
 
 docker network create "$NET" >/dev/null
 cid=$(docker run -d "${P[@]}" --network "$NET" --name "$NAME" -v "$FIXTURES:/src:ro" "$IMAGE")

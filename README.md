@@ -131,25 +131,34 @@ All variables are read at container start.
 Legacy tags run PHP versions that are no longer supported by the PHP project and have known vulnerabilities.
 Use them only if you cannot upgrade yet, and never expose them to the internet.
 
-### Security fixes only: PHP 7.4 and 5.6
+### Security updates: PHP 7.4 and 5.6
 
 | PHP | Tags |
 |---|---|
 | 7.4.33 | `prod-apache-php7.4`, `prod-apache-php7`, `dev-apache-php7.4`, `dev-apache-php7` |
 | 5.6.40 | `prod-apache-php5.6`, `prod-apache-php5`, `dev-apache-php5.6`, `dev-apache-php5` |
 
-These receive only backported fixes for critical vulnerabilities, no other updates.
-They contain the fix for CVE-2026-109618 / CVE-2026-109619 ([PHP advisory](https://www.php.net/archive/2026.php#2026-10-21-5)):
-7.4 with the PHP security team's [backport](https://github.com/php/php-src/commit/712e60f9edfd),
-5.6 with Ondřej Surý's backport of the same fix. Many other known 5.6 vulnerabilities remain unfixed.
+Since October 2026 these run on Debian 12 with PHP from [Ondřej Surý's packages](https://deb.sury.org/), which carry
+backported fixes for many vulnerabilities found after the PHP project stopped supporting these versions, including
+CVE-2026-109618 / CVE-2026-109619 ([PHP advisory](https://www.php.net/archive/2026.php#2026-10-21-5)).
+They are rebuilt automatically when a new package or Debian update is released. Not every known vulnerability is fixed.
 
-With this fix, a request that exceeds the PHP memory limit ends immediately: the client gets an empty response,
-error handlers and shutdown functions do not run, and the error appears only in the container log.
-Apps that lower `memory_limit` at runtime (e.g. in an error handler) can hit this on every such request.
+They keep the extensions, settings and tools of the earlier images (wkhtmltopdf 0.12.4 on 5.6, 0.12.6.1 on 7.4),
+with these differences:
+
+* PHP comes from Debian packages: `PHP_VERSION` has a package suffix (e.g. `5.6.40-105+0~...`), and there are no
+  `docker-php-ext-*` scripts, `pecl` or compilers. Add extensions with apt, e.g. `apt-get install php7.4-redis`,
+  then copy its ini file from `/etc/php/<version>/mods-available/` to `/usr/local/etc/php/conf.d/`.
+* Configuration stays in `/usr/local/etc/php` (`php.ini`, `conf.d/*.ini`); Debian's `/etc/php/<version>/*/conf.d` is not read.
+* `pcntl` is available on the command line only, not in Apache.
 
 The 5.6 prod image (added October 2026) is the dev image without Xdebug, with errors logged but not displayed and version headers hidden.
 
-**Changed with the October 2026 rebuild** (mitigations recommended by the advisory):
+With the CVE-2026-109618 fix, a request that exceeds the PHP memory limit ends immediately: the client gets an empty response,
+error handlers and shutdown functions do not run, and the error appears only in the container log.
+Apps that lower `memory_limit` at runtime (e.g. in an error handler) can hit this on every such request.
+
+**Mitigations** recommended by the advisory (since October 2026):
 
 * file uploads are limited to **100M** (`post_max_size` 110M; Apache rejects larger request bodies)
 * Apache serves one request per process (`KeepAlive Off`, `MaxConnectionsPerChild 1`): safer, but slower under load

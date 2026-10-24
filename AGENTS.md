@@ -6,21 +6,30 @@ There is no app code in this repo. `README.md` is for image users (public, also 
 maintainer notes go in `MAINTAINING.md`. The images are offered as-is, best effort (`LICENSE`: all rights reserved).
 
 ## Layout
-- `Dockerfile`: PHP 8.3/8.4 images. Stages: `mpdecimal` (checksum-verified libmpdec build), `base`, `dev`, `prod` (default target).
+- `Dockerfile`: current PHP 8.x images (versions in `matrix.json`). Stages: `mpdecimal` (checksum-verified libmpdec build), `base`, `dev`, `prod` (default target).
   PHP extensions are installed with `install-php-extensions` (mlocati/docker-php-extension-installer, pinned).
 - `config/php/*.ini`, `config/apache/*.conf`: copied into the images; `common.ini` is shared, the rest is per target.
-- `legacy/<php>-<variant>/`: frozen Dockerfiles for PHP 5.6 and 7.4, kept buildable for internal projects. Change only to keep them building or secure.
-- `legacy/php*-base/`: official docker-library recipes for PHP 5.6/7.4 plus `patches/` (CVE-2026-109618/109619 backports); built locally first via
-  `prebuild` in `matrix.json`, as `maidea-local/php:*` (never pushed). Edit only lines marked `maidea:`.
+- `legacy/php<version>/`: end-of-life PHP versions for internal projects: Debian 12 + PHP from Sury's packages (security backports),
+  targets `prod`/`dev`. They must keep behaving like the earlier images (extensions in `extensions.txt`/`modules.txt`,
+  checked at build time). Change only to keep them building, secure or compatible.
 - `matrix.json`: single source of truth for every published image (context, target, build args, tags, smoke-test kind).
 - `scripts/build.sh`: builds from `matrix.json` (`--smoke`, `--push`). `tests/smoke.sh`: checks a built image through a running container.
+- `scripts/changed-images.sh`: decides which images CI builds and publishes for a change; `scripts/outdated-images.sh`: which ones the daily check rebuilds.
 
 ## Workflows
 ```sh
-scripts/build.sh --smoke prod-8.4    # build + smoke test one image, no push
-scripts/build.sh --smoke             # all images
+scripts/build.sh --smoke prod-8.4                  # build + smoke test one image, no push
+scripts/build.sh --smoke                           # all images
+scripts/changed-images.sh origin/master --publish  # images a push to master would publish
 ```
 Build for `linux/amd64` only (wkhtmltopdf is an amd64 .deb). Do not add `--platform` to `FROM` lines.
+
+## Publishing
+- A push to `master` is a release: CI builds, smoke-tests and publishes every affected image to Docker Hub.
+  Confirm with the user before pushing; check what will be published with `scripts/changed-images.sh` first. Docs-only changes publish nothing.
+- The Docker Hub overview is a copy of `README.md` and is not synced automatically: after changing the README,
+  prepare the overview for the user to paste (relative and in-page links rewritten, since they do not work on Docker Hub).
+- After a publish, verify the result: pull the published tag and run `tests/smoke.sh` against it.
 
 ## Rules
 - Keep PECL extension versions pinned (decimal 2.x breaks the API used by apps). PHP patch versions float on purpose.
@@ -30,3 +39,7 @@ Build for `linux/amd64` only (wkhtmltopdf is an amd64 .deb). Do not add `--platf
 - Prod hardening must stay: `expose_php=Off`, `register_argc_argv=Off`, Apache `ServerTokens Prod`, loopback-only health check on `127.0.0.1:8081`.
 - Changing any behaviour a user can see (ini values, env vars, included tools): update `README.md` in the same change.
 - Verify changes with `scripts/build.sh --smoke <id>` before pushing images.
+- Scripts must run on macOS's bash 3.2 as well as on Linux in CI: no `mapfile`, no GNU-only flags.
+- New scripts must be committed as executable: check `git ls-files -s` shows mode `100755`
+  (with `core.fileMode=false` a plain `chmod` is not recorded; use `git update-index --chmod=+x`).
+- Local images can be stale: pull before inspecting or comparing an image (`docker pull`, or `--pull` on build/run).
