@@ -58,7 +58,7 @@ jobs:
           all=$(jq -c '[.images[].id]' matrix.json)
           retest='[]'
           case "$EVENT" in
-            workflow_call)
+            workflow_call|schedule)
               images=$INPUT_IMAGES push=true ;;
             workflow_dispatch)
               if [ "$INPUT_IMAGES" = all ]; then images=$all
