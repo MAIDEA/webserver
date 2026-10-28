@@ -49,7 +49,8 @@ jobs:
           fetch-depth: 0
       - id: plan
         env:
-          EVENT: ${{ github.event_name }}
+          # github.* is the caller's context in a called workflow: upstream-check.yml runs on schedule or workflow_dispatch
+          EVENT: ${{ github.workflow == 'upstream-check' && 'workflow_call' || github.event_name }}
           INPUT_IMAGES: ${{ inputs.images }}
           INPUT_PUSH: ${{ inputs.push }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
@@ -58,7 +59,7 @@ jobs:
           all=$(jq -c '[.images[].id]' matrix.json)
           retest='[]'
           case "$EVENT" in
-            workflow_call|schedule)
+            workflow_call)
               images=$INPUT_IMAGES push=true ;;
             workflow_dispatch)
               if [ "$INPUT_IMAGES" = all ]; then images=$all
