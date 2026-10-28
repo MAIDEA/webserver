@@ -54,19 +54,23 @@ RUN set -eux; \
     dpkg --compare-versions "$(dpkg-query -W -f '${Version}' php5.6-common)" ge "$PHP_PACKAGE_MIN"; \
     rm -rf /var/lib/apt/lists/*; \
     ln -s /usr/bin/php5.6 /usr/local/bin/php; \
-# PHP reads /usr/local/etc/php (PHPRC, PHP_INI_SCAN_DIR), not Debian's /etc/php: no Debian php.ini
+# PHP reads /usr/local/etc/php (PHPRC, PHP_INI_SCAN_DIR), not Debian's /etc/php: no Debian php.ini, and Debian's
+# per-SAPI conf.d directories are links to /usr/local/etc/php/conf.d, so phpenmod, phpdismod, phpquery and
+# package installs act on the configuration PHP reads. Extensions start disabled; the next step enables ours.
     rm -f /etc/php/5.6/apache2/php.ini /etc/php/5.6/cli/php.ini; \
-    mkdir -p "$PHP_INI_DIR/conf.d"
+    phpdismod -v 5.6 -s ALL $(phpquery -v 5.6 -M); \
+    mkdir -p "$PHP_INI_DIR/conf.d"; \
+    for sapi in apache2 cli; do \
+        rmdir "/etc/php/5.6/$sapi/conf.d"; \
+        ln -s "$PHP_INI_DIR/conf.d" "/etc/php/5.6/$sapi/conf.d"; \
+    done
 
-# Extensions, loaded from /usr/local/etc/php/conf.d (Debian's ini files, keeping their load order).
+# Extensions: enabled with phpenmod (links in /usr/local/etc/php/conf.d to Debian's ini files, in their load order).
 # php-modules-check fails the build if "php -m" differs from modules.txt or PHP prints startup warnings.
 COPY extensions.txt modules.txt /usr/local/share/php/
 COPY php-modules-check /usr/local/bin/
 RUN set -eux; \
-    for ext in $(grep -v '^#' /usr/local/share/php/extensions.txt); do \
-        prio=$(sed -n 's/^; priority=//p' "/etc/php/5.6/mods-available/$ext.ini"); \
-        cp "/etc/php/5.6/mods-available/$ext.ini" "$PHP_INI_DIR/conf.d/$prio-$ext.ini"; \
-    done; \
+    phpenmod -v 5.6 -s ALL $(grep -v '^#' /usr/local/share/php/extensions.txt); \
 # Defaults that Debian's build changed, back to those of the official php image
     { \
         echo 'session.save_path = ""'; \
@@ -180,7 +184,7 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends php5.6-xdebug; \
     rm -rf /var/lib/apt/lists/*; \
-    cp /etc/php/5.6/mods-available/xdebug.ini "$PHP_INI_DIR/conf.d/20-xdebug.ini"; \
+    phpenmod -v 5.6 -s ALL xdebug; \
     php-modules-check xdebug; \
     php -r 'exit(version_compare(phpversion("xdebug"), "2.5.0", ">=") && version_compare(phpversion("xdebug"), "2.6.0", "<") ? 0 : 1);'
 

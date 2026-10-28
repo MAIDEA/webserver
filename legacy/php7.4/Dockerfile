@@ -54,20 +54,24 @@ RUN set -eux; \
     dpkg --compare-versions "$(dpkg-query -W -f '${Version}' php7.4-common)" ge "$PHP_PACKAGE_MIN"; \
     rm -rf /var/lib/apt/lists/* /tmp/wkhtmltopdf.deb; \
     ln -s /usr/bin/php7.4 /usr/local/bin/php; \
-# PHP reads /usr/local/etc/php (PHPRC, PHP_INI_SCAN_DIR), not Debian's /etc/php: no Debian php.ini
+# PHP reads /usr/local/etc/php (PHPRC, PHP_INI_SCAN_DIR), not Debian's /etc/php: no Debian php.ini, and Debian's
+# per-SAPI conf.d directories are links to /usr/local/etc/php/conf.d, so phpenmod, phpdismod, phpquery and
+# package installs act on the configuration PHP reads. Extensions start disabled; the next step enables ours.
     rm -f /etc/php/7.4/apache2/php.ini /etc/php/7.4/cli/php.ini; \
-    mkdir -p "$PHP_INI_DIR/conf.d"
+    phpdismod -v 7.4 -s ALL $(phpquery -v 7.4 -M); \
+    mkdir -p "$PHP_INI_DIR/conf.d"; \
+    for sapi in apache2 cli; do \
+        rmdir "/etc/php/7.4/$sapi/conf.d"; \
+        ln -s "$PHP_INI_DIR/conf.d" "/etc/php/7.4/$sapi/conf.d"; \
+    done
 
-# Extensions, loaded from /usr/local/etc/php/conf.d (Debian's ini files, keeping their load order).
+# Extensions: enabled with phpenmod (links in /usr/local/etc/php/conf.d to Debian's ini files, in their load order).
 # php-modules-check fails the build if "php -m" differs from modules.txt or PHP prints startup warnings.
 COPY extensions.txt modules.txt /usr/local/share/php/
 COPY php-modules-check /usr/local/bin/
 RUN set -eux; \
-    for ext in $(grep -v '^#' /usr/local/share/php/extensions.txt); do \
-        prio=$(sed -n 's/^; priority=//p' "/etc/php/7.4/mods-available/$ext.ini"); \
-        cp "/etc/php/7.4/mods-available/$ext.ini" "$PHP_INI_DIR/conf.d/$prio-$ext.ini"; \
-    done; \
-    printf 'apc.enable_cli=1\napc.shm_size=512M\n' >> "$PHP_INI_DIR/conf.d/20-apcu.ini"; \
+    phpenmod -v 7.4 -s ALL $(grep -v '^#' /usr/local/share/php/extensions.txt); \
+    printf 'apc.enable_cli=1\napc.shm_size=512M\n' > "$PHP_INI_DIR/conf.d/zz-apcu.ini"; \
     echo 'date.timezone = "UTC"' > "$PHP_INI_DIR/conf.d/timezone.ini"; \
 # Defaults that Debian's build changed, back to those of the official php image
     { \
@@ -181,7 +185,7 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends php7.4-xdebug; \
     rm -rf /var/lib/apt/lists/*; \
-    cp /etc/php/7.4/mods-available/xdebug.ini "$PHP_INI_DIR/conf.d/20-xdebug.ini"; \
+    phpenmod -v 7.4 -s ALL xdebug; \
     { \
         echo 'xdebug.client_host=${XDEBUG_REMOTE_HOST}'; \
         echo 'xdebug.start_with_request=trigger'; \

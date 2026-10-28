@@ -1,8 +1,9 @@
-# Debian ini files (/etc/php/5.6/mods-available) to load: the extensions of the earlier image built from the official recipe
+# Extensions to enable (Debian ini files in /etc/php/5.6/mods-available): those of the earlier image built from the official recipe, plus exif as in the 8.x images
 bcmath
 ctype
 curl
 dom
+exif
 fileinfo
 ftp
 gd

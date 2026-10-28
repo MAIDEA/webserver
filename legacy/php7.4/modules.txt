@@ -1,4 +1,4 @@
-# Expected "php -m" (prod; dev adds xdebug), as in the earlier image built from the official recipe; checked at build time
+# Expected "php -m" on the command line (prod; dev adds xdebug), checked at build time; Apache loads the same except pcntl (command line only)
 apcu
 bcmath
 Core
@@ -6,6 +6,7 @@ ctype
 curl
 date
 dom
+exif
 fileinfo
 filter
 ftp
@@ -18,6 +19,7 @@ json
 libxml
 mbstring
 mcrypt
+mysqli
 mysqlnd
 openssl
 pcntl

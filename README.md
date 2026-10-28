@@ -62,7 +62,7 @@ CVE-2026-115560, which has no fix in PHP yet. Upload progress bars that rely on 
 
 ## Included
 
-* PHP extensions: apcu, bcmath, decimal, exif, gd (freetype, jpeg, webp), imap, intl, mysqli, opcache, pcntl, pdo_mysql, pdo_pgsql, pgsql, shmop, soap, sockets, zip,
+* PHP extensions: apcu, bcmath, decimal, exif, ftp, gd (freetype, jpeg, webp), imap, intl, mysqli, opcache, pcntl, pdo_mysql, pdo_pgsql, pgsql, shmop, soap, sockets, zip,
   plus the extensions built into the official image (curl, mbstring, …); xdebug in dev
 * wkhtmltopdf 0.12.6.1 (patched qt) at `/usr/local/bin/wkhtmltopdf`.
   It is no longer maintained upstream and uses an old browser engine: do not render untrusted HTML or URLs with it.
@@ -179,9 +179,11 @@ They keep the extensions, settings and tools of the earlier images (wkhtmltopdf 
 with these differences:
 
 * PHP comes from Debian packages: `PHP_VERSION` has a package suffix (e.g. `5.6.40-105+0~...`), and there are no
-  `docker-php-ext-*` scripts, `pecl` or compilers. Add extensions with apt, e.g. `apt-get install php7.4-redis`,
-  then copy its ini file from `/etc/php/<version>/mods-available/` to `/usr/local/etc/php/conf.d/`.
-* Configuration stays in `/usr/local/etc/php` (`php.ini`, `conf.d/*.ini`); Debian's `/etc/php/<version>/*/conf.d` is not read.
+  `docker-php-ext-*` scripts, `pecl` or compilers. Add extensions with apt, e.g. `apt-get install php7.4-redis`
+  (enabled on install); `phpenmod`/`phpdismod` switch installed ones on and off (e.g. `phpenmod xsl`).
+* Configuration stays in `/usr/local/etc/php` (`php.ini`, `conf.d/*.ini`); Debian's `/etc/php/<version>/{apache2,cli}/conf.d`
+  are links to `/usr/local/etc/php/conf.d`.
+* `exif` (and `mysqli` on 7.4) are loaded as well, as in the current images.
 * `pcntl` is available on the command line only, not in Apache.
 * `mod_headers` is enabled, so `Header` lines in `.htaccess` files now take effect.
 

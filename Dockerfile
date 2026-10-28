@@ -51,6 +51,7 @@ RUN ln -s libmpdec.so.2.5.1 /usr/local/lib/libmpdec.so.3 \
         bcmath \
         decimal-${DECIMAL_VERSION} \
         exif \
+        ftp \
         imap-${IMAP_VERSION} \
         intl \
         mysqli \

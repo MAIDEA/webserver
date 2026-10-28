@@ -64,7 +64,20 @@ if [ "$KIND" != legacy ]; then  # legacy images keep a fixed 110M limit
 fi
 docker rm -f "$env" >/dev/null
 
+# Extensions: the same set in every image (apart from what a PHP version cannot have), loaded by Apache as on the command line
+want="bcmath exif ftp gd imap intl mysqli pdo_mysql shmop soap sockets zip" cli_only=readline
+if [ "$KIND" = legacy ]; then cli_only=pcntl; else want="$want apcu decimal pcntl pdo_pgsql pgsql"; fi
+web_ext=$(inside curl -s http://localhost/extensions.php | grep -v -x apache2handler | LC_ALL=C sort)
+cli_ext=$(inside php -m | grep -v -e '^\[' -e '^$' | tr '[:upper:]' '[:lower:]' | LC_ALL=C sort -u)
+missing=$(for e in $want; do echo "$web_ext" | grep -qx "$e" || printf '%s ' "$e"; done)
+check "extensions in Apache ($want)" "${missing:-all}" all
+check "Apache loads the command line's extensions, except $cli_only" \
+    "$(diff <(echo "$web_ext") <(echo "$cli_ext") | grep '^[<>]' | tr '\n' ' ')" "> $cli_only "
+check "FTP over SSL" "$(inside php -r 'echo function_exists("ftp_ssl_connect") ? "yes" : "no";')" yes
+
 if [ "$KIND" = legacy ]; then
+    check "Debian's conf.d directories are links to the one PHP reads" \
+        "$(inside sh -c 'readlink /etc/php/*/apache2/conf.d /etc/php/*/cli/conf.d' | sort -u)" /usr/local/etc/php/conf.d
     probe=$(inside curl -s http://localhost/)
     check "PHP served by Apache" "$(echo "$probe" | json php)" "$version"
     check "CVE-2026-109618/109619 patch in image" \
@@ -100,7 +113,6 @@ probe=$(inside curl -s http://localhost/)
 check "APCu through Apache" "$(echo "$probe" | json apcu_roundtrip)" True
 check "decimal through Apache" "$(echo "$probe" | json decimal)" 0.3
 check "imap available" "$(echo "$probe" | json imap)" True
-check "mysqli and exif loaded" "$(inside php -r 'echo extension_loaded("mysqli") && extension_loaded("exif") ? "yes" : "no";')" yes
 check "session upload progress off" "$(echo "$probe" | json upload_progress)" 0
 
 if [ "$KIND" = prod ]; then

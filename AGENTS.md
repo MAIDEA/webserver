@@ -35,7 +35,8 @@ Build for `linux/amd64` only (wkhtmltopdf is an amd64 .deb). Do not add `--platf
 ## Rules
 - Keep PECL extension versions pinned (decimal 2.x breaks the API used by apps). PHP patch versions float on purpose.
 - Downloads outside apt/PECL are checksum-verified (mpdecimal, wkhtmltopdf); keep it that way when bumping versions.
-- Adding a PHP extension: add it to the `install-php-extensions` list, then check it in `tests/smoke.sh` if apps depend on it.
+- Extensions are the same in every image, except where a PHP version cannot have one. Adding one: add it to the
+  `install-php-extensions` list (8.x) and to `extensions.txt`/`modules.txt` (legacy), then to the list in `tests/smoke.sh`.
 - New image or tag: add it to `matrix.json`; tags are never renamed or removed, since consumers pull them.
 - Prod hardening must stay: `expose_php=Off`, `register_argc_argv=Off`, Apache `ServerTokens Prod`, loopback-only health check on `127.0.0.1:8081`.
 - Changing any behaviour a user can see (ini values, env vars, included tools): update `README.md` in the same change.

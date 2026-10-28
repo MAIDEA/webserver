@@ -69,9 +69,10 @@ The old per-version branches and tags are preserved as `archive/branch/*` and `a
 * `legacy/php5.6` and `legacy/php7.4` install PHP from [packages.sury.org](https://packages.sury.org/php/) on Debian 12
   (`debian:bookworm-slim`). Sury's packages carry backported security fixes; the Dockerfiles refuse package versions
   older than the CVE-2026-109618/109619 fix (`PHP_PACKAGE_MIN`).
-* They reproduce the earlier images built from the official php recipe: same extensions (`extensions.txt` = Debian ini
-  files to load, `modules.txt` = expected `php -m`, checked at build time by `php-modules-check`), settings, tools and
-  Apache setup, with PHP reading `/usr/local/etc/php` (`PHPRC`, `PHP_INI_SCAN_DIR`) instead of Debian's `/etc/php`.
+* They reproduce the earlier images built from the official php recipe: same extensions plus exif (and mysqli on 7.4)
+  (`extensions.txt` = extensions enabled with `phpenmod`, `modules.txt` = expected `php -m`, checked at build time by
+  `php-modules-check`), settings, tools and Apache setup, with PHP reading `/usr/local/etc/php` (`PHPRC`,
+  `PHP_INI_SCAN_DIR`); Debian's per-SAPI `conf.d` directories are links to `/usr/local/etc/php/conf.d`.
 * Extension versions outside the PHP package (apcu, mcrypt, xdebug) come from Sury and are checked to stay within a minor version.
 * Keep them like this: change only what keeps them building, secure or compatible with the apps that use them.
 * They get `shared/` through a named build context (`COPY --from=shared`, passed by `build.sh`), so build them with `build.sh`.
