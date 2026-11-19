@@ -29,7 +29,8 @@ Serves `./src/app/webroot` on http://localhost:8080. For other layouts set `APAC
 
 Which tag to use:
 
-* **`prod-apache-php8.4`, `dev-apache-php8.3`, …** stay on that PHP version and only receive patch releases. Recommended.
+* **`prod-apache-php8.5`, `prod-apache-php8.4`, `prod-apache-php8.3`** (and the `dev-` ones) stay on that PHP version
+  and only receive patch releases. Recommended.
 * **`latest`, `prod-apache-php`, `prod-apache-php8`, `dev-apache-php`, `dev-apache-php8`** move to a newer PHP version over time
   (currently 8.4), which can break your app.
 * **Immutable tags** `<tag>-<php version>-<build date>` (e.g. `prod-apache-php8.4.27-20261022`, `.2` etc. for further builds that day)
