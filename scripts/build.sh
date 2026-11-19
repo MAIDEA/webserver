@@ -75,6 +75,8 @@ for id in "${IDS[@]}"; do
     fi
     # Files used by all images; the legacy Dockerfiles COPY --from=shared
     args+=(--build-context shared=shared)
+    # Re-runs the Dockerfiles' package-upgrade step once a day (not a cached layer from an earlier build)
+    args+=(--build-arg "BUILD_DATE=$DATE")
     [ "$(field .target)" != null ] && args+=(--target "$(field .target)")
     while IFS= read -r kv; do args+=(--build-arg "$kv"); done < <(field '.args | to_entries[] | "\(.key)=\(.value)"')
     # The current base image, by digest (never a stale local copy); recorded for the upstream check

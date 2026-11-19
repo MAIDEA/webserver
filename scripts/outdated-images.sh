@@ -2,6 +2,7 @@
 # Print the ids (JSON array) of published images whose sources have changed since they were built:
 # - the base image: the org.opencontainers.image.base.digest label (set by build.sh) differs from its current digest
 # - for images with "php_package": the hr.maidea.php-package label differs from the package's current version
+# - apt has updates for the image's packages (e.g. Debian security fixes not yet in the base image)
 # Only images with "track_upstream": true are checked.
 set -eo pipefail
 
@@ -32,6 +33,16 @@ while IFS=$'\t' read -r id tag base package; do
             outdated+=("$id")
             continue
         fi
+    fi
+    # Package updates the image's upgrade step would install now (pulls the image: one counted request)
+    updates=$(docker run --rm --pull always --quiet --platform linux/amd64 --entrypoint sh "$REPO:$tag" -c \
+        'apt-get update -qq >/dev/null && apt-get -s upgrade' | sed -n 's/^Inst \([^ ]*\) \[\([^]]*\)\] (\([^ ]*\).*/\1 \2 -> \3/p')
+    docker rmi -f "$REPO:$tag" >/dev/null
+    if [ -n "$updates" ]; then
+        echo "$id: package updates:" >&2
+        sed 's/^/    /' <<< "$updates" >&2
+        outdated+=("$id")
+        continue
     fi
     echo "$id: up to date" >&2
 done < <(jq -r '.images[] | select(.track_upstream) | [.id, .tags[0], .base, (.php_package // "")] | @tsv' matrix.json)

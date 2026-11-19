@@ -59,8 +59,9 @@ The old per-version branches and tags are preserved as `archive/branch/*` and `a
   * `tests/`: every image in pull requests; when publishing, nothing is rebuilt and the published images are smoke-tested
   * docs: nothing
 * `upstream-check.yml`: daily, rebuilds and publishes images whose sources have changed (`scripts/outdated-images.sh`):
-  the base image (`org.opencontainers.image.base.digest` label set by `build.sh`) or, for legacy images,
-  the Sury PHP package (`hr.maidea.php-package` label).
+  the base image (`org.opencontainers.image.base.digest` label set by `build.sh`), for legacy images
+  the Sury PHP package (`hr.maidea.php-package` label), or pending package updates in the published image
+  (`apt-get -s upgrade`; the Dockerfiles' upgrade step re-runs on each day's build via `BUILD_DATE`).
 * CI builds reuse layers from the GitHub Actions cache (`BUILD_CACHE=gha`, one cache per image), so unchanged layers are not rebuilt.
 * Requires the repository secret `DOCKERHUB_TOKEN` (Docker Hub access token, read & write) and the variable `DOCKERHUB_USERNAME`.
 

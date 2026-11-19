@@ -164,6 +164,13 @@ RUN mkdir -p /var/www/healthcheck \
     && a2disconf -q serve-cgi-bin \
     && a2enconf -q remoteip-proxy request-limits hardening
 
+# Updates released after the packages above were installed (Debian security fixes, Sury libraries); our config
+# files are kept. BUILD_DATE (set by scripts/build.sh) re-runs this step on each day's build instead of reusing a cached layer.
+ARG BUILD_DATE=
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -o Dpkg::Options::=--force-confold \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY apache2-foreground docker-php-entrypoint /usr/local/bin/
 WORKDIR /src
 EXPOSE 80

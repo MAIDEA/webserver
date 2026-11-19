@@ -35,7 +35,7 @@ Which tag to use:
 * **Immutable tags** `<tag>-<php version>-<build date>` (e.g. `prod-apache-php8.4.27-20261022`, `.2` etc. for further builds that day)
   are never overwritten: pin one for reproducible deploys or to roll back.
 
-The images are rebuilt automatically when the official PHP image changes (PHP patch releases, Debian security updates), usually within a day.
+The images are rebuilt automatically when a PHP patch release or a Debian security update is published, usually within a day.
 Older PHP versions are listed under [Legacy tags](#legacy-tags).
 
 ## Variants

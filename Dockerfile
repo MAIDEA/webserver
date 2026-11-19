@@ -116,6 +116,13 @@ COPY config/php/common.ini /usr/local/etc/php/conf.d/zz-common.ini
 # WWW_DATA_UID/GID, PHP_INI_* settings and /docker-entrypoint.d/ hooks, then the official entrypoint
 COPY shared/docker-webserver-entrypoint /usr/local/bin/
 
+# Debian updates released after the base image was built (e.g. Apache security fixes); our config files are kept.
+# BUILD_DATE (set by scripts/build.sh) re-runs this step on each day's build instead of reusing a cached layer.
+ARG BUILD_DATE=
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -o Dpkg::Options::=--force-confold \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /src
 
 EXPOSE 80

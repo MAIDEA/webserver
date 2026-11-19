@@ -1,5 +1,5 @@
 # Daily: rebuild and push images whose official php base image has changed
-# (new PHP patch release or Debian security updates). See scripts/outdated-images.sh.
+# (new PHP patch release or Debian security updates) or that have package updates pending. See scripts/outdated-images.sh.
 name: upstream-check
 
 on:
